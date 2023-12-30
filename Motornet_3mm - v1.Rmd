@@ -1,0 +1,1161 @@
+---
+title: "fPET-fMRI-motor network"
+author: "Marina"
+date: "2023-11-30"
+output: html_document
+---
+
+```{r }
+#directory, packages and functions 
+#set working directory 
+setwd("~/Promotion/RS-fPET/Analysen/MotorNetzwerk/3mm/HC-10")
+
+
+#list packages
+pags<-list("openxlsx", "reshape","tidyverse","ggpubr","rstatix", "plyr", "corrplot", "ggplot2","reshape2")
+# packages for: loading xlsx files
+#long/wide tranform
+
+
+#load packages
+lapply(pags, require, character.only=TRUE)
+
+##Define functions
+
+#function for returning individual cor.test pvalue per cor in data matrix compatible with corrplot
+rcor.pvalue<-function (mat, ...) {
+  mat <- data.matrix(mat)
+  p <- ncol(mat)
+  index <- t(combn(p, 2))
+  nindex <- nrow(index)
+  p_mat<- matrix(nrow = p, ncol = p)
+  
+  for (i in 1:nindex) {
+    p_mat[index[i,1], index[i,2]]<-cor.test(mat[, index[i,1]], mat[, index[i,2]], ...)$p.value
+  }
+  
+  pMat <- p_mat
+  colnames(pMat)<-colnames(mat)
+  rownames(pMat)<-colnames(mat)
+  diag(pMat)<-0
+  
+  pMat
+}
+
+
+#define color ramp for corrplot
+col5<-colorRampPalette(c("#FFEDA0",  "#FEE38B", "#FED976", "#FEC661", "#FEB24C",  "#FEA044", "#FD8D3C",  "#FD6E33", "#FC4E2A", "#F03423", "#E31A1C",  "#D00D21", "#BD0026", "#9F0026", "#800026","#690019")) 
+
+#read data
+RSfPET_MotorNet<-read.xlsx(xlsxFile = "AllSub_comp6.xlsx", sheet = "Tabelle1",
+                           colNames = TRUE)
+```
+
+
+```{r}
+#read global mean values from file
+my_globals <- read.delim("globals_3mm.txt",header=FALSE, sep=",")
+
+#divide uptake in each ROI by global per timeframe
+RSfPET_MotorNet<-RSfPET_MotorNet/my_globals[1:810,]
+
+#define subject variable subject id 
+subject_id<-c(rep("RS_fPET001",30), rep("RS_fPET002",30), rep("RS_fPET003",30),rep("RS_fPET004",30), rep("RS_fPET005",30),rep("RS_fPET006",30),rep("RS_fPET007",30),rep("RS_fPET008",30),rep("RS_fPET010",30),
+rep("RS_fPET011",30),rep("RS_fPET012",30),rep("RS_fPET014",30),rep("RS_fPET015",30),rep("RS_fPET016",30),
+rep("RS_fPET017",30),
+rep("RS_fPET018",30),rep("RS_fPET019",30),rep("RS_fPET020",30), rep("RS_fPET021",30),rep("RS_fPET022",30),rep("RS_fPET023",30),rep("RS_fPET024",30),rep("RS_fPET025",30),
+              rep("RS_fPET026",30),rep("RS_fPET027",30),rep("RS_fPET028",30),rep("RS_fPET029",30))
+
+
+#add record id and convert record id into factor
+RSfPET_MotorNet$record_id<-subject_id
+RSfPET_MotorNet$record_id<-factor(RSfPET_MotorNet$record_id)
+
+#add diagnose to_id gm removed data set 
+RSfPET_MotorNet$diagnose[RSfPET_MotorNet$record_id=="RS_fPET001"|RSfPET_MotorNet$record_id=="RS_fPET002"|RSfPET_MotorNet$record_id=="RS_fPET003"|RSfPET_MotorNet$record_id=="RS_fPET005"|RSfPET_MotorNet$record_id=="RS_fPET007"|RSfPET_MotorNet$record_id=="RS_fPET008"|RSfPET_MotorNet$record_id=="RS_fPET010"|RSfPET_MotorNet$record_id=="RS_fPET014"|RSfPET_MotorNet$record_id=="RS_fPET016"|RSfPET_MotorNet$record_id=="RS_fPET022"|RSfPET_MotorNet$record_id=="RS_fPET025"|RSfPET_MotorNet$record_id=="RS_fPET026"|RSfPET_MotorNet$record_id=="RS_fPET028"|RSfPET_MotorNet$record_id=="RS_fPET029"]= "PD"
+
+RSfPET_MotorNet$diagnose[RSfPET_MotorNet$record_id=="RS_fPET004"|RSfPET_MotorNet$record_id=="RS_fPET006"|RSfPET_MotorNet$record_id=="RS_fPET011"|RSfPET_MotorNet$record_id=="RS_fPET012"|RSfPET_MotorNet$record_id=="RS_fPET015"|RSfPET_MotorNet$record_id=="RS_fPET017"|RSfPET_MotorNet$record_id=="RS_fPET018"|RSfPET_MotorNet$record_id=="RS_fPET019"|RSfPET_MotorNet$record_id=="RS_fPET020"|RSfPET_MotorNet$record_id=="RS_fPET021"|RSfPET_MotorNet$record_id=="RS_fPET023"|RSfPET_MotorNet$record_id=="RS_fPET024"|RSfPET_MotorNet$record_id=="RS_fPET027"]= "HC"
+
+#convert diagnose into factor
+RSfPET_MotorNet$diagnose<-factor(RSfPET_MotorNet$diagnose)
+#show record ids
+RSfPET_MotorNet$record_id
+
+#add timepoints
+time<-c(rep(61:90, 27)) #repeat time points 61- 90 16 x
+RSfPET_MotorNet$time<-time
+
+```
+
+
+
+
+
+```{r, warnings=FALSE, error=TRUE}
+#PD
+#in groups
+
+#calculate mean uptake for each ROI per subject for sPET plots
+MeanUptake<-aggregate(RSfPET_MotorNet[,1:44], by = list(RSfPET_MotorNet$record_id, RSfPET_MotorNet$diagnose), FUN=mean)
+
+PD<-subset(MeanUptake,Group.2=="PD")
+
+
+#sort new with left side first for correlation plots
+
+sPD<-data.frame(PD$aal3_95,PD$aal3_97, PD$aal3_99,PD$aal3_101, PD$aal3_103,PD$aal3_105,PD$aal3_107,PD$aal3_109,
+                PD$aal3_77,PD$aal3_79,PD$aal3_th_L,PD$aal3_163,PD$aal3_169,PD$aal3_15,PD$aal3_85,PD$aal3_73,PD$aal3_1,PD$aal3_67,PD$aal3_13,
+                PD$aal3_96,PD$aal3_89, PD$aal3_100,PD$aal3_102, PD$aal3_104,PD$aal3_106,PD$aal3_108,PD$aal3_110,PD$aal3_112,
+                PD$aal3_78,PD$aal3_80, PD$aal3_th_r,PD$aal3_16,PD$aal3_74,PD$aal3_2,PD$aal3_68,PD$aal3_14,PD$aal3_86,
+                PD$aal3_113,PD$aal3_114,PD$aal3_116,PD$aal3_117,PD$aal3_118,PD$aal3_119,PD$aal3_120)
+
+#correlation matrix ROI-based uptake values
+CorrMatCovPD<-cor(sPD, use = "complete.obs", method="pearson")
+zCorrMatCovPD<-atanh(CorrMatCovPD)
+#convert diagonal to 1
+diag(CorrMatCovPD)<-1
+
+#generate p matrix for corrplot
+p.Mat.PD<-rcor.pvalue(sPD, method="pearson")
+diag(p.Mat.PD)<-1
+colnames(p.Mat.PD)<-colnames(CorrMatCovPD)
+rownames(p.Mat.PD)<-colnames(CorrMatCovPD)
+
+
+diag(zCorrMatCovPD)<-NA
+#png(file="Moto_zCorMatCovPD.png",
+ #  width=800, height=600)
+corrplot(zCorrMatCovPD, method="color",col=col5(50) ,tl.pos="n",tl.offset = 15, is.corr=FALSE,cl.ratio=0.2,tl.col="black",tl.cex=0.5, cl.cex=1.5,p.mat=p.Mat.PD, sig.level = 0.05, insig = "blank" )
+segments(c(8.5,14.5,21.5,28.5,31.5,37.5), rep(0,4), 
+         c(8.5,14.5,21.5,28.5,31.5,37.5), rep(45,4), lwd=2)
+segments(rep(0,4), c(7.5,13.5,16.5,23.5,30.5,36.5),
+         rep(45,4),c(7.5,13.5,16.5,23.5,30.5,36.5), lwd=2)
+text(x = rep(-8, 5), y = c(4,11,15,21,28,33,40), labels = c("Vermis","Cortical Motor","SCGM","Cereb","Cortical Motor", "SCGM","Cereb"), cex=1.5)
+text(x = c(3,10,13,21,27,30,38), y = rep(-5, 5),labels = c("Cereb","SCGM","Cortical Motor","Cereb","SCGM" ,"Cortical Motor","Vermis"),xpd=NA, srt=45, cex=1.5)
+
+#dev.off()
+
+#HC
+HC<-subset(MeanUptake,Group.2=="HC")
+
+sHC<-data.frame(HC$aal3_95,HC$aal3_97, HC$aal3_99,HC$aal3_101, HC$aal3_103,HC$aal3_105,HC$aal3_107,HC$aal3_109,
+                HC$aal3_77,HC$aal3_79,HC$aal3_th_L,HC$aal3_163,HC$aal3_169,HC$aal3_15,HC$aal3_85,HC$aal3_73,HC$aal3_1,HC$aal3_67,HC$aal3_13,
+                HC$aal3_96,HC$aal3_89, HC$aal3_100,HC$aal3_102, HC$aal3_104,HC$aal3_106,HC$aal3_108,HC$aal3_110,HC$aal3_112,
+                HC$aal3_78,HC$aal3_80, HC$aal3_th_r,HC$aal3_16,HC$aal3_74,HC$aal3_2,HC$aal3_68,HC$aal3_14,HC$aal3_86,
+                HC$aal3_113,HC$aal3_114,HC$aal3_116,HC$aal3_117,HC$aal3_118,HC$aal3_119,HC$aal3_120)
+
+#correlation matrix ROI-based uptake values
+CorrMatCovHC<-cor(sHC, use = "complete.obs", method="pearson")
+diag(CorrMatCovHC)<-1
+zCorrMatCovHC<-atanh(CorrMatCovHC)
+
+#generate p matrix for corrplot
+p.Mat.HC<-rcor.pvalue(sHC, method="pearson")
+diag(p.Mat.HC)<-1
+
+
+diag(zCorrMatCovHC)<-NA
+#png(file="Moto_zCorMatCovHC.png",
+ #  width=800, height=600)
+corrplot(zCorrMatCovHC, method="color",col=col5(50) ,tl.pos="n",tl.offset = 15, is.corr=FALSE,cl.ratio=0.2,tl.col="black",tl.cex=0.5, cl.cex=1.5,p.mat=p.Mat.HC, sig.level = 0.05, insig = "blank" )
+segments(c(8.5,14.5,21.5,28.5,31.5,37.5), rep(0,4), 
+         c(8.5,14.5,21.5,28.5,31.5,37.5), rep(45,4), lwd=2)
+segments(rep(0,4), c(7.5,13.5,16.5,23.5,30.5,36.5),
+         rep(45,4),c(7.5,13.5,16.5,23.5,30.5,36.5), lwd=2)
+text(x = rep(-8, 5), y = c(4,11,15,21,28,33,40), labels = c("Vermis","Cortical Motor","SCGM","Cereb","Cortical Motor", "SCGM","Cereb"), cex=1.5)
+text(x = c(3,10,13,21,27,30,38), y = rep(-5, 5),labels = c("Cereb","SCGM","Cortical Motor","Cereb","SCGM" ,"Cortical Motor","Vermis"),xpd=NA, srt=45, cex=1.5)
+
+#dev.off()
+
+
+
+
+```
+
+```{r, error=TRUE}
+
+#calculate group differences after fisher's z transformation 
+
+#split for subjects
+#sort data frame L / R 
+sRSfPET_MotorNet<-data.frame(RSfPET_MotorNet$aal3_95,RSfPET_MotorNet$aal3_97, RSfPET_MotorNet$aal3_99,RSfPET_MotorNet$aal3_101, RSfPET_MotorNet$aal3_103,RSfPET_MotorNet$aal3_105,RSfPET_MotorNet$aal3_107,RSfPET_MotorNet$aal3_109,
+                             RSfPET_MotorNet$aal3_77,RSfPET_MotorNet$aal3_79,RSfPET_MotorNet$aal3_th_L,RSfPET_MotorNet$aal3_163,RSfPET_MotorNet$aal3_169,RSfPET_MotorNet$aal3_15,RSfPET_MotorNet$aal3_85,RSfPET_MotorNet$aal3_73,RSfPET_MotorNet$aal3_1,RSfPET_MotorNet$aal3_67,RSfPET_MotorNet$aal3_13,
+                             RSfPET_MotorNet$aal3_96,RSfPET_MotorNet$aal3_89, RSfPET_MotorNet$aal3_100,RSfPET_MotorNet$aal3_102, RSfPET_MotorNet$aal3_104,RSfPET_MotorNet$aal3_106,RSfPET_MotorNet$aal3_108,RSfPET_MotorNet$aal3_110,RSfPET_MotorNet$aal3_112,
+                             RSfPET_MotorNet$aal3_78,RSfPET_MotorNet$aal3_80, RSfPET_MotorNet$aal3_th_r,RSfPET_MotorNet$aal3_16,RSfPET_MotorNet$aal3_74,RSfPET_MotorNet$aal3_2,RSfPET_MotorNet$aal3_68,RSfPET_MotorNet$aal3_14,RSfPET_MotorNet$aal3_86,
+                             RSfPET_MotorNet$aal3_113,RSfPET_MotorNet$aal3_114,RSfPET_MotorNet$aal3_116,RSfPET_MotorNet$aal3_117,RSfPET_MotorNet$aal3_118,RSfPET_MotorNet$aal3_119,RSfPET_MotorNet$aal3_120)
+
+sRSfPET_MotorNet$record_id<-subject_id
+#split data for subjects
+my_Subjects <- split(sRSfPET_MotorNet, RSfPET_MotorNet$record_id)
+
+Subjects<-subject_id<-c("RS_fPET001","RS_fPET002","RS_fPET003","RS_fPET004", "RS_fPET005","RS_fPET006","RS_fPET007","RS_fPET008","RS_fPET010","RS_fPET011","RS_fPET012","RS_fPET014","RS_fPET015","RS_fPET016","RS_fPET017","RS_fPET018","RS_fPET019","RS_fPET020","RS_fPET021","RS_fPET022","RS_fPET023","RS_fPET024","RS_fPET025","RS_fPET026","RS_fPET027","RS_fPET028","RS_fPET029")
+
+
+out<-list()
+
+for (i in 1:length(my_Subjects)) {        
+  out[[i]]<-list()
+  assign(Subjects[i], my_Subjects[[i]])
+  CorrMat1<-cor(my_Subjects[[i]][1:44], use = "complete.obs", method="pearson")
+  out[[i]]<-atanh(CorrMat1)
+  png(file=paste0("corrplot_comp6", Subjects[i],".png"))
+  corrplot(CorrMat1, method="color",col=col5(50),  is.corr=FALSE,cl.ratio=0.2,type = "upper", tl.col="black", sig.level = 0.05, insig = "blank" )
+  dev.off()
+}
+
+#mean plot PD
+#get array of corr matrices for PD only
+arrPD <- array( unlist(out[c(1,2,3,5,7,8,9,12,14,20,23,24,26,27)]) , c(44,44,14))#add additional subjects
+
+#calculate mean 
+meanzCorrPD<-apply( arrPD , 1:2 , mean )
+colnames(meanzCorrPD)<-colnames(sRSfPET_MotorNet[,1:44])
+rownames(meanzCorrPD)<-colnames(sRSfPET_MotorNet[,1:44])
+diag(meanzCorrPD)=1
+
+
+#mean plot HC
+#get array of corr matrices for HC only
+arrHC <- array( unlist(out[c(4,6,10,11,13,15,16,17,18,19,21,22,25)]) , c(44,44,13))#add additional subjects
+meanzCorrHC<-apply( arrHC , 1:2 , mean )
+colnames(meanzCorrHC)<-colnames(sRSfPET_MotorNet[,1:44])
+rownames(meanzCorrHC)<-colnames(sRSfPET_MotorNet[,1:44])
+diag(meanzCorrHC)<-1
+
+#extract fisher-transformed correlation coefficient matrices per subject
+zCorrRSfPET004<-as.matrix(arrHC[,,1])
+zCorrRSfPET006<-as.matrix(arrHC[,,2])
+zCorrRSfPET011<-as.matrix(arrHC[,,3])
+zCorrRSfPET012<-as.matrix(arrHC[,,4])
+zCorrRSfPET015<-as.matrix(arrHC[,,5])
+zCorrRSfPET017<-as.matrix(arrHC[,,6])
+zCorrRSfPET018<-as.matrix(arrHC[,,7])
+zCorrRSfPET019<-as.matrix(arrHC[,,8])
+zCorrRSfPET020<-as.matrix(arrHC[,,9])
+zCorrRSfPET021<-as.matrix(arrHC[,,10])
+zCorrRSfPET023<-as.matrix(arrHC[,,11])
+zCorrRSfPET024<-as.matrix(arrHC[,,12])
+zCorrRSfPET027<-as.matrix(arrHC[,,13])
+
+
+zCorrRSfPET001<-as.matrix(arrPD[,,1])
+zCorrRSfPET002<-as.matrix(arrPD[,,2])
+zCorrRSfPET003<-as.matrix(arrPD[,,3])
+zCorrRSfPET005<-as.matrix(arrPD[,,4])
+zCorrRSfPET007<-as.matrix(arrPD[,,5])
+zCorrRSfPET008<-as.matrix(arrPD[,,6])
+zCorrRSfPET010<-as.matrix(arrPD[,,7])
+zCorrRSfPET014<-as.matrix(arrPD[,,8])
+zCorrRSfPET016<-as.matrix(arrPD[,,9])
+zCorrRSfPET022<-as.matrix(arrPD[,,10])
+zCorrRSfPET025<-as.matrix(arrPD[,,11])
+zCorrRSfPET026<-as.matrix(arrPD[,,12])
+zCorrRSfPET028<-as.matrix(arrPD[,,13])
+zCorrRSfPET029<-as.matrix(arrPD[,,14])
+
+#add additional subjects
+colnames(zCorrRSfPET001)<-colnames(sRSfPET_MotorNet[,1:44])
+
+
+#add subjects here
+t.stat<- matrix(sapply(1:1936, function(x) 
+  tryCatch({t.test(c(zCorrRSfPET004[x], zCorrRSfPET006[x], zCorrRSfPET011[x], zCorrRSfPET012[x],zCorrRSfPET015[x], zCorrRSfPET017[x],zCorrRSfPET018[x],zCorrRSfPET019[x],zCorrRSfPET020[x],zCorrRSfPET021[x],zCorrRSfPET023[x],zCorrRSfPET024[x],zCorrRSfPET027[x]), 
+                   c(zCorrRSfPET001[x], zCorrRSfPET002[x],zCorrRSfPET003[x], zCorrRSfPET005[x], zCorrRSfPET007[x], zCorrRSfPET008[x],zCorrRSfPET010[x],zCorrRSfPET014[x],zCorrRSfPET016[x],zCorrRSfPET022[x],zCorrRSfPET025[x],zCorrRSfPET026[x],zCorrRSfPET028[x],zCorrRSfPET029[x]))$statistic},
+           error = function(err) {return(NA)})), nrow = 44)
+
+
+
+p.value<- matrix(sapply(1:1936, function(x) 
+  tryCatch({t.test(c(zCorrRSfPET004[x], zCorrRSfPET006[x], zCorrRSfPET011[x], zCorrRSfPET012[x],zCorrRSfPET015[x], zCorrRSfPET017[x],zCorrRSfPET018[x],zCorrRSfPET019[x],zCorrRSfPET020[x],zCorrRSfPET021[x],zCorrRSfPET023[x],zCorrRSfPET024[x],zCorrRSfPET027[x]), 
+                   c(zCorrRSfPET001[x], zCorrRSfPET002[x],zCorrRSfPET003[x], zCorrRSfPET005[x], zCorrRSfPET007[x], zCorrRSfPET008[x],zCorrRSfPET010[x],zCorrRSfPET014[x],zCorrRSfPET016[x],zCorrRSfPET022[x],zCorrRSfPET025[x],zCorrRSfPET026[x],zCorrRSfPET028[x],zCorrRSfPET029[x]))$p.value},
+           error = function(err) {return(NA)})), nrow= 44)
+
+#one sample PD
+p.value.PD<- matrix(sapply(1:1936, function(x) 
+  tryCatch({t.test(c(zCorrRSfPET001[x], zCorrRSfPET002[x],zCorrRSfPET003[x], zCorrRSfPET005[x], zCorrRSfPET007[x], zCorrRSfPET008[x],zCorrRSfPET010[x],zCorrRSfPET014[x],zCorrRSfPET016[x],zCorrRSfPET022[x],zCorrRSfPET025[x],zCorrRSfPET026[x],zCorrRSfPET028[x],zCorrRSfPET029[x]))$p.value},
+           error = function(err) {return(NA)})), nrow = 44)
+diag(p.value.PD)<-1
+
+p.value.PD[lower.tri(p.value.PD)]<-NA
+
+colnames(p.value.PD)<-colnames(sRSfPET_MotorNet[,1:44])
+rownames(p.value.PD)<-colnames(sRSfPET_MotorNet[,1:44])
+
+
+#one sample HC
+p.value.HC<- matrix(sapply(1:1936, function(x) 
+  tryCatch({t.test(c(zCorrRSfPET004[x], zCorrRSfPET006[x], zCorrRSfPET011[x], zCorrRSfPET012[x],zCorrRSfPET015[x], zCorrRSfPET017[x],zCorrRSfPET018[x],zCorrRSfPET019[x],zCorrRSfPET020[x],zCorrRSfPET021[x],zCorrRSfPET023[x],zCorrRSfPET024[x],zCorrRSfPET027[x]))$p.value},
+           error = function(err) {return(NA)})), nrow = 44)
+diag(p.value.HC)<-1
+p.value.HC[lower.tri(p.value.HC)]<-NA
+
+
+colnames(p.value.HC)<-colnames(sRSfPET_MotorNet[,1:44])
+rownames(p.value.HC)<-colnames(sRSfPET_MotorNet[,1:44])
+
+
+#png(file="Moto_meanCorrHC.png",
+#    width=800, height=600)
+corrplot(meanzCorrHC, method="color",col=col5(50) , is.corr=FALSE, tl.pos="n",tl.offset=15,cl.ratio=0.2,tl.col="black",tl.cex=0.5, cl.cex=1.5,p.mat=p.value.HC, sig.level = 0.05, insig = "blank" )
+segments(c(8.5,14.5,21.5,28.5,31.5,37.5), rep(0,4), 
+         c(8.5,14.5,21.5,28.5,31.5,37.5), rep(45,4), lwd=2)
+segments(rep(0,4), c(7.5,13.5,16.5,23.5,30.5,36.5),
+         rep(45,4),c(7.5,13.5,16.5,23.5,30.5,36.5), lwd=2)
+text(x = rep(-8, 5), y = c(4,11,15,21,28,33,40), labels = c("Vermis","Cortical Motor","SCGM","Cereb","Cortical Motor", "SCGM","Cereb"), cex=1.5)
+text(x = c(3,10,13,21,27,30,38), y = rep(-5, 5),labels = c("Cereb","SCGM","Cortical Motor","Cereb","SCGM" ,"Cortical Motor","Vermis"),xpd=NA, srt=45, cex=1.5)
+
+#dev.off()
+
+#png(file="Moto_meanCorrPD.png",
+ #   width=800, height=600)
+corrplot(meanzCorrPD, method="color",col=col5(50) ,tl.pos="n",tl.offset = 15, is.corr=FALSE,cl.ratio=0.2,tl.col="black",tl.cex=0.5, cl.cex=1.5,p.mat=p.value.PD, sig.level = 0.05, insig = "blank" )
+segments(c(8.5,14.5,21.5,28.5,31.5,37.5), rep(0,4), 
+         c(8.5,14.5,21.5,28.5,31.5,37.5), rep(45,4), lwd=2)
+segments(rep(0,4), c(7.5,13.5,16.5,23.5,30.5,36.5),
+         rep(45,4),c(7.5,13.5,16.5,23.5,30.5,36.5), lwd=2)
+text(x = rep(-8, 5), y = c(4,11,15,21,28,33,40), labels = c("Vermis","Cortical Motor","SCGM","Cereb","Cortical Motor", "SCGM","Cereb"), cex=1.5)
+text(x = c(3,10,13,21,27,30,38), y = rep(-5, 5),labels = c("Cereb","SCGM","Cortical Motor","Cereb","SCGM" ,"Cortical Motor","Vermis"),xpd=NA, srt=45, cex=1.5)
+
+#dev.off()
+
+
+
+
+
+```
+
+```{r, error=TRUE}
+#create binary for graphs
+#create adjacency matrix for HC (positive only)
+#signifcant T/F
+ad.p.Mat.PD<-p.Mat.PD<0.05
+#matrix with significant in numbers (corrs) pos and neg 
+CorrMatCovPD_th <- matrix(CorrMatCovPD[ifelse(ad.p.Mat.PD, T, NA)], ncol = ncol(CorrMatCovPD))
+#only pos as T/F
+CorrMatCovPD_p<-CorrMatCovPD_th>0
+
+#create matrix with only pos 
+pn_zCorrMatCovPD_th<-ifelse(CorrMatCovPD_th >0, yes = 1, no = 0)
+pn_zCorrMatCovPD_th[is.na(pn_zCorrMatCovPD_th)]<-0
+
+makeSymm <- function(pn_zCorrMatCovPD_th) {
+  pn_zCorrMatCovPD_th[lower.tri(pn_zCorrMatCovPD_th)] <- t(pn_zCorrMatCovPD_th)[lower.tri(pn_zCorrMatCovPD_th)]
+  return(pn_zCorrMatCovPD_th)
+}
+p_zCorrMatCovPD<-makeSymm(pn_zCorrMatCovPD_th)
+
+#create binary for graphs
+#create adjacency matrix for HC (positive only)
+#only significant T/F
+ad.p.Mat.HC<-p.Mat.HC<0.05
+#matrix with significant connections in numbers (corrs) pos and neg 
+CorrMatCovHC_th <- matrix(CorrMatCovHC[ifelse(ad.p.Mat.HC, T, NA)], ncol = ncol(CorrMatCovHC))
+#only pos in T/F
+CorrMatCovHC_p<-CorrMatCovHC_th>0
+
+#create matrix with only signifcant positive connections
+pn_zCorrMatCovHC_th<-ifelse(CorrMatCovHC_th >0, yes = 1, no = 0)
+pn_zCorrMatCovHC_th[is.na(pn_zCorrMatCovHC_th)]<-0
+
+makeSymm <- function(pn_zCorrMatCovHC_th) {
+  pn_zCorrMatCovHC_th[lower.tri(pn_zCorrMatCovHC_th)] <- t(pn_zCorrMatCovHC_th)[lower.tri(pn_zCorrMatCovHC_th)]
+  return(pn_zCorrMatCovHC_th)
+}
+p_zCorrMatCovHC<-makeSymm(pn_zCorrMatCovHC_th)
+
+
+
+#create adjacency matrices for fPET
+#only significant connections T/F
+ad.p.value.PD<-p.value.PD<0.05
+
+#matrix with signif. corrs only
+#significant connections in numbers (corrs) pos and neg 
+meanzCorrPD_th<-matrix(meanzCorrPD[ifelse(ad.p.value.PD, T, NA)], ncol = ncol(meanzCorrPD))
+
+#pos connections T/F
+p_meanzCorrPD_th<-meanzCorrPD_th>0
+
+#create binary matrix of significant ones
+#only positive significant connections 
+ad.p.value.PD_n<-ifelse(p_meanzCorrPD_th == TRUE, yes = 1, no = 0)
+
+ad.p.value.PD_n[is.na(ad.p.value.PD_n)]<-0
+
+
+
+#only positive connections T/F
+ad.p.value.HC<-p.value.HC<0.05
+
+#matrix with signif. corrs only
+#significant connections as numbers pos and neg (Corrs)
+meanzCorrHC_th<-matrix(meanzCorrHC[ifelse(ad.p.value.HC, T, NA)], ncol = ncol(meanzCorrHC))
+#only positive T/F
+p_meanzCorrHC_th<-meanzCorrHC_th>0
+#create binary matrix of significant ones
+#only positive significant connections as 1, elde 0 
+ad.p.value.HC_n<-ifelse(p_meanzCorrHC_th == TRUE, yes = 1, no = 0)
+
+ad.p.value.HC_n[is.na(ad.p.value.HC_n)]<-0
+
+
+
+```
+
+```{r, error=TRUE}
+#read MRI connectivity data from csv
+
+RSfMRI_PD <- read.csv(file = "beta_RRC_03_PD_rest.csv",head = TRUE, sep=";")
+
+i<-c(1:44)
+RSfMRI_PD[ , i] <- apply(RSfMRI_PD[ , i], 2,            #
+                         function(x) as.numeric(as.character(x)))
+
+RSfMRI_PD<-as.matrix(RSfMRI_PD)
+RSfMRI_PD[is.na(RSfMRI_PD)]<-1
+
+
+RSfMRI_PD<-RSfMRI_PD[,2:45]
+
+
+rownames(RSfMRI_PD)<-colnames(RSfMRI_PD)
+
+
+#sort after Lobuli
+sRSfMRI_PD<-RSfMRI_PD[c("AAL3_95_comp6","AAL3_97_comp6","AAL3_99_comp6","AAL3_101_comp6","AAL3_103_comp6","AAL3_105_comp6","AAL3_107_comp6",
+                        "AAL3_109_comp6","AAL3_77_comp6","AAL3_79_comp6","AAL3_Th_L_comp6","AAL3_163_comp6","AAL3_169_comp6",
+                        "AAL3_15_comp6","AAL3_85_comp6","AAL3_73_comp6","AAL3_1_comp6","AAL3_67_comp6","AAL3_13_comp6",
+                        "AAL3_96_comp6","AAL3_98_comp6", "AAL3_100_comp6","AAL3_102_comp6", "AAL3_104_comp6","AAL3_106_comp6","AAL3_108_comp6",
+                        "AAL3_110_comp6","AAL3_112_comp6","AAL3_78_comp6","AAL3_80_comp6", "AAL3_Th_R_comp6","AAL3_16_comp6","AAL3_74_comp6","AAL3_2_comp6","AAL3_68_comp6",
+                        "AAL3_14_comp6","AAL3_86_comp6","AAL3_113_comp6","AAL3_114_comp6","AAL3_116_comp6","AAL3_117_comp6","AAL3_118_comp6","AAL3_119_comp6",
+                        "AAL3_120_comp6"),c("AAL3_95_comp6","AAL3_97_comp6","AAL3_99_comp6","AAL3_101_comp6","AAL3_103_comp6","AAL3_105_comp6","AAL3_107_comp6",
+                       "AAL3_109_comp6","AAL3_77_comp6","AAL3_79_comp6","AAL3_Th_L_comp6","AAL3_163_comp6","AAL3_169_comp6",
+                       "AAL3_15_comp6","AAL3_85_comp6","AAL3_73_comp6","AAL3_1_comp6","AAL3_67_comp6","AAL3_13_comp6",
+                       "AAL3_96_comp6","AAL3_98_comp6", "AAL3_100_comp6","AAL3_102_comp6", "AAL3_104_comp6","AAL3_106_comp6","AAL3_108_comp6",
+                       "AAL3_110_comp6","AAL3_112_comp6","AAL3_78_comp6","AAL3_80_comp6", "AAL3_Th_R_comp6","AAL3_16_comp6","AAL3_74_comp6","AAL3_2_comp6","AAL3_68_comp6",
+                       "AAL3_14_comp6","AAL3_86_comp6","AAL3_113_comp6","AAL3_114_comp6","AAL3_116_comp6","AAL3_117_comp6","AAL3_118_comp6","AAL3_119_comp6",
+                       "AAL3_120_comp6")]
+#add pmatrix 
+RSfMRI_PDp <- read.csv(file = "p_RRC_03_PD_rest.csv", head = TRUE, sep=";")
+
+RSfMRI_PDp<-RSfMRI_PDp[,2:45]
+colnames(RSfMRI_PDp)<-colnames(RSfMRI_PD)
+rownames(RSfMRI_PDp)<-colnames(RSfMRI_PD[])
+
+Motor_RSfMRI_PDp<-RSfMRI_PDp[c("AAL3_95_comp6","AAL3_97_comp6","AAL3_99_comp6","AAL3_101_comp6","AAL3_103_comp6","AAL3_105_comp6","AAL3_107_comp6",
+                               "AAL3_109_comp6","AAL3_77_comp6","AAL3_79_comp6","AAL3_Th_L_comp6","AAL3_163_comp6","AAL3_169_comp6",
+                               "AAL3_15_comp6","AAL3_85_comp6","AAL3_73_comp6","AAL3_1_comp6","AAL3_67_comp6","AAL3_13_comp6",
+                               "AAL3_96_comp6","AAL3_98_comp6", "AAL3_100_comp6","AAL3_102_comp6", "AAL3_104_comp6","AAL3_106_comp6","AAL3_108_comp6",
+                               "AAL3_110_comp6","AAL3_112_comp6","AAL3_78_comp6","AAL3_80_comp6", "AAL3_Th_R_comp6","AAL3_16_comp6","AAL3_74_comp6","AAL3_2_comp6","AAL3_68_comp6",
+                               "AAL3_14_comp6","AAL3_86_comp6","AAL3_113_comp6","AAL3_114_comp6","AAL3_116_comp6","AAL3_117_comp6","AAL3_118_comp6","AAL3_119_comp6",
+                               "AAL3_120_comp6"),c("AAL3_95_comp6","AAL3_97_comp6","AAL3_99_comp6","AAL3_101_comp6","AAL3_103_comp6","AAL3_105_comp6","AAL3_107_comp6",
+                                                   "AAL3_109_comp6","AAL3_77_comp6","AAL3_79_comp6","AAL3_Th_L_comp6","AAL3_163_comp6","AAL3_169_comp6",
+                                                   "AAL3_15_comp6","AAL3_85_comp6","AAL3_73_comp6","AAL3_1_comp6","AAL3_67_comp6","AAL3_13_comp6",
+                                                   "AAL3_96_comp6","AAL3_98_comp6", "AAL3_100_comp6","AAL3_102_comp6", "AAL3_104_comp6","AAL3_106_comp6","AAL3_108_comp6",
+                                                   "AAL3_110_comp6","AAL3_112_comp6","AAL3_78_comp6","AAL3_80_comp6", "AAL3_Th_R_comp6","AAL3_16_comp6","AAL3_74_comp6","AAL3_2_comp6","AAL3_68_comp6",
+                                                   "AAL3_14_comp6","AAL3_86_comp6","AAL3_113_comp6","AAL3_114_comp6","AAL3_116_comp6","AAL3_117_comp6","AAL3_118_comp6","AAL3_119_comp6",
+                                                   "AAL3_120_comp6")]
+i<-c(1:44)
+Motor_RSfMRI_PDp[ , i] <- apply(Motor_RSfMRI_PDp[ , i], 2,            # Specify own function within apply
+                                function(x) as.numeric(as.character(x)))
+Motor_RSfMRI_PDp<-as.matrix(Motor_RSfMRI_PDp)
+Motor_RSfMRI_PDp[lower.tri(Motor_RSfMRI_PDp)]<-NA
+
+#plot mean z R values with one sample t-test ps PD
+#png(file="Moto_fMRIPD.png",
+ #  width=800, height=600)
+corrplot(RSfMRI_PD, method="color",col=col5(50),tl.pos="n", tl.offset=15, is.corr=FALSE,cl.ratio=0.2, tl.col="black",tl.cex=0.5, cl.cex=1.5,p.mat=Motor_RSfMRI_PDp, sig.level = 0.05, insig = "blank" )
+segments(c(8.5,14.5,21.5,28.5,31.5,37.5), rep(0,4), 
+         c(8.5,14.5,21.5,28.5,31.5,37.5), rep(45,4), lwd=2)
+segments(rep(0,4), c(7.5,13.5,16.5,23.5,30.5,36.5),
+         rep(45,4),c(7.5,13.5,16.5,23.5,30.5,36.5), lwd=2)
+text(x = rep(-8, 5), y = c(4,11,15,21,28,33,40), labels = c("Vermis","Cortical Motor","SCGM","Cereb","Cortical Motor", "SCGM","Cereb"), cex=1.5)
+text(x = c(3,10,13,21,27,30,38), y = rep(-5, 5),labels = c("Cereb","SCGM","Cortical Motor","Cereb","SCGM" ,"Cortical Motor","Vermis"),xpd=NA, srt=45, cex=1.5)
+
+#add lines and names for segments
+#dev.off()
+
+
+#read MRI connectivity data from csv
+
+
+
+RSfMRI_HC <- read.csv(file = "beta_RRC_03_HC_-10_rest.csv",head = TRUE, sep=";")
+
+i<-c(1:44)
+RSfMRI_HC[ , i] <- apply(RSfMRI_HC[ , i], 2,            #
+                         function(x) as.numeric(as.character(x)))
+
+RSfMRI_HC<-as.matrix(RSfMRI_HC)
+RSfMRI_HC[is.na(RSfMRI_HC)]<-1
+
+
+RSfMRI_HC<-RSfMRI_HC[,2:45]
+
+
+rownames(RSfMRI_HC)<-colnames(RSfMRI_HC)
+
+#sort after Lobuli
+RSfMRI_HC<-RSfMRI_HC[c("AAL3_95_comp6","AAL3_97_comp6","AAL3_99_comp6","AAL3_101_comp6","AAL3_103_comp6","AAL3_105_comp6","AAL3_107_comp6",
+                       "AAL3_109_comp6","AAL3_77_comp6","AAL3_79_comp6","AAL3_Th_L_comp6","AAL3_163_comp6","AAL3_169_comp6",
+                       "AAL3_15_comp6","AAL3_85_comp6","AAL3_73_comp6","AAL3_1_comp6","AAL3_67_comp6","AAL3_13_comp6",
+                       "AAL3_96_comp6","AAL3_98_comp6", "AAL3_100_comp6","AAL3_102_comp6", "AAL3_104_comp6","AAL3_106_comp6","AAL3_108_comp6",
+                       "AAL3_110_comp6","AAL3_112_comp6","AAL3_78_comp6","AAL3_80_comp6", "AAL3_Th_R_comp6","AAL3_16_comp6","AAL3_74_comp6","AAL3_2_comp6","AAL3_68_comp6",
+                       "AAL3_14_comp6","AAL3_86_comp6","AAL3_113_comp6","AAL3_114_comp6","AAL3_116_comp6","AAL3_117_comp6","AAL3_118_comp6","AAL3_119_comp6",
+                       "AAL3_120_comp6"),c("AAL3_95_comp6","AAL3_97_comp6","AAL3_99_comp6","AAL3_101_comp6","AAL3_103_comp6","AAL3_105_comp6","AAL3_107_comp6",
+                                           "AAL3_109_comp6","AAL3_77_comp6","AAL3_79_comp6","AAL3_Th_L_comp6","AAL3_163_comp6","AAL3_169_comp6",
+                                           "AAL3_15_comp6","AAL3_85_comp6","AAL3_73_comp6","AAL3_1_comp6","AAL3_67_comp6","AAL3_13_comp6",
+                                           "AAL3_96_comp6","AAL3_98_comp6", "AAL3_100_comp6","AAL3_102_comp6", "AAL3_104_comp6","AAL3_106_comp6","AAL3_108_comp6",
+                                           "AAL3_110_comp6","AAL3_112_comp6","AAL3_78_comp6","AAL3_80_comp6", "AAL3_Th_R_comp6","AAL3_16_comp6","AAL3_74_comp6","AAL3_2_comp6","AAL3_68_comp6",
+                                           "AAL3_14_comp6","AAL3_86_comp6","AAL3_113_comp6","AAL3_114_comp6","AAL3_116_comp6","AAL3_117_comp6","AAL3_118_comp6","AAL3_119_comp6",
+                                           "AAL3_120_comp6")]
+
+#add pmatrix 
+RSfMRI_HCp <- read.csv(file = "p_RRC_03_HC_-10_rest.csv", head = TRUE, sep=";")
+
+RSfMRI_HCp<-RSfMRI_HCp[,2:45]
+rownames(RSfMRI_HCp)<-colnames(RSfMRI_HCp)
+
+Motor_RSfMRI_HCp<-RSfMRI_HCp[c("AAL3_95_comp6","AAL3_97_comp6","AAL3_99_comp6","AAL3_101_comp6","AAL3_103_comp6","AAL3_105_comp6","AAL3_107_comp6",
+                               "AAL3_109_comp6","AAL3_77_comp6","AAL3_79_comp6","AAL3_Th_L_comp6","AAL3_163_comp6","AAL3_169_comp6",
+                               "AAL3_15_comp6","AAL3_85_comp6","AAL3_73_comp6","AAL3_1_comp6","AAL3_67_comp6","AAL3_13_comp6",
+                               "AAL3_96_comp6","AAL3_98_comp6", "AAL3_100_comp6","AAL3_102_comp6", "AAL3_104_comp6","AAL3_106_comp6","AAL3_108_comp6",
+                               "AAL3_110_comp6","AAL3_112_comp6","AAL3_78_comp6","AAL3_80_comp6", "AAL3_Th_R_comp6","AAL3_16_comp6","AAL3_74_comp6","AAL3_2_comp6","AAL3_68_comp6",
+                               "AAL3_14_comp6","AAL3_86_comp6","AAL3_113_comp6","AAL3_114_comp6","AAL3_116_comp6","AAL3_117_comp6","AAL3_118_comp6","AAL3_119_comp6",
+                               "AAL3_120_comp6"),c("AAL3_95_comp6","AAL3_97_comp6","AAL3_99_comp6","AAL3_101_comp6","AAL3_103_comp6","AAL3_105_comp6","AAL3_107_comp6",
+                                                   "AAL3_109_comp6","AAL3_77_comp6","AAL3_79_comp6","AAL3_Th_L_comp6","AAL3_163_comp6","AAL3_169_comp6",
+                                                   "AAL3_15_comp6","AAL3_85_comp6","AAL3_73_comp6","AAL3_1_comp6","AAL3_67_comp6","AAL3_13_comp6",
+                                                   "AAL3_96_comp6","AAL3_98_comp6", "AAL3_100_comp6","AAL3_102_comp6", "AAL3_104_comp6","AAL3_106_comp6","AAL3_108_comp6",
+                                                   "AAL3_110_comp6","AAL3_112_comp6","AAL3_78_comp6","AAL3_80_comp6", "AAL3_Th_R_comp6","AAL3_16_comp6","AAL3_74_comp6","AAL3_2_comp6","AAL3_68_comp6",
+                                                   "AAL3_14_comp6","AAL3_86_comp6","AAL3_113_comp6","AAL3_114_comp6","AAL3_116_comp6","AAL3_117_comp6","AAL3_118_comp6","AAL3_119_comp6",
+                                                   "AAL3_120_comp6")]
+i<-c(1:44)
+Motor_RSfMRI_HCp[ , i] <- apply(Motor_RSfMRI_HCp[ , i], 2,            # Specify own function within apply
+                                function(x) as.numeric(as.character(x)))
+Motor_RSfMRI_HCp<-as.matrix(Motor_RSfMRI_HCp)
+Motor_RSfMRI_HCp[lower.tri(Motor_RSfMRI_HCp)]<-NA
+
+#plot mean z R values with one sample t-test ps HC
+#png(file="Moto_fMRIHC.png",
+   #width=800, height=600)
+par(mar=c(5,8,4,1)+.1)
+corrplot(RSfMRI_HC, method="color",col=col5(50),tl.pos="n", tl.offset=15, is.corr=FALSE,cl.ratio=0.2, tl.col="black",tl.cex=0.5, cl.cex=1.5,p.mat=Motor_RSfMRI_HCp, sig.level = 0.05, insig = "blank" )
+segments(c(8.5,14.5,21.5,28.5,31.5,37.5), rep(0,4), 
+         c(8.5,14.5,21.5,28.5,31.5,37.5), rep(45,4), lwd=2)
+segments(rep(0,4), c(7.5,13.5,16.5,23.5,30.5,36.5),
+         rep(45,4),c(7.5,13.5,16.5,23.5,30.5,36.5), lwd=2)
+text(x = rep(-8, 5), y = c(4,11,15,21,28,33,40), labels = c("Vermis","Cortical Motor","SCGM","Cereb","Cortical Motor", "SCGM","Cereb"), cex=1.5)
+text(x = c(3,10,13,21,27,30,38), y = rep(-5, 5),labels = c("Cereb","SCGM","Cortical Motor","Cereb","SCGM" ,"Cortical Motor","Vermis"),xpd=NA, srt=45, cex=1.5)
+#add lines and names for segments
+#dev.off()
+
+```
+
+```{r, error=TRUE}
+#count 1s in cov matrix
+p_zCorrMatCovHC[lower.tri(p_zCorrMatCovHC)]<-0
+count_Cov<-sum(p_zCorrMatCovHC[upper.tri(p_zCorrMatCovHC)])
+
+
+#sPET vs fPET
+commonHC_fPET_sPET<-p_zCorrMatCovHC==1&ad.p.value.HC_n==1
+commonHC_fPET_sPET_bin<-ifelse(commonHC_fPET_sPET == TRUE, yes = 1, no = 0)
+#count 1s in fPET matrix
+ad.p.value.HC_n[lower.tri(ad.p.value.HC_n)]<-0
+count_fPET<-sum(ad.p.value.HC_n[upper.tri(ad.p.value.HC_n)])
+
+commonHC_fPET_sPET_bin[lower.tri(commonHC_fPET_sPET_bin)]<-0
+count_sPETfPET<-sum(commonHC_fPET_sPET_bin[upper.tri(commonHC_fPET_sPET_bin)])
+
+DC_sPETfPET=(2*count_sPETfPET)/(count_fPET+count_Cov)
+#0.21
+
+
+#sPET vs fPET
+commonPD_fPET_sPET<-p_zCorrMatCovPD==1&ad.p.value.PD_n==1
+commonPD_fPET_sPET_bin<-ifelse(commonPD_fPET_sPET == TRUE, yes = 1, no = 0)
+
+ad.p.value.PD_n[lower.tri(ad.p.value.PD_n)]<-0
+countPD_fPET<-sum(ad.p.value.PD_n[upper.tri(ad.p.value.PD_n)])
+#count 1s in common edges
+commonPD_fPET_sPET_bin[lower.tri(commonPD_fPET_sPET_bin)]<-0
+countPD_sPETfPET<-sum(commonPD_fPET_sPET_bin[upper.tri(commonPD_fPET_sPET_bin)])
+
+p_zCorrMatCovPD[lower.tri(p_zCorrMatCovPD)]<-0
+countPD_Cov<-sum(p_zCorrMatCovPD[upper.tri(p_zCorrMatCovPD)])
+#calculate dice 
+DCPD_sPETfPET=(2*countPD_sPETfPET)/(countPD_fPET+countPD_Cov)
+#0.23
+
+#count 1s in fMRI matrix
+#create ad p matrix for fMRI
+ad.pfMRI.HC<-Motor_RSfMRI_HCp<0.05
+
+fMRICorrHC_th<-matrix(RSfMRI_HC[ifelse(ad.pfMRI.HC, T, NA)], ncol = ncol(RSfMRI_HC))
+pfMRICorrHC_th<-fMRICorrHC_th>0
+
+ad.p.value.RSfMRIHC_n<-ifelse(pfMRICorrHC_th == TRUE, yes = 1, no = 0)
+ad.p.value.RSfMRIHC_n[is.na(ad.p.value.RSfMRIHC_n)]<-0
+ad.p.value.RSfMRIHC_n[lower.tri(ad.p.value.RSfMRIHC_n)]<-0
+
+count_fMRI<-sum(ad.p.value.RSfMRIHC_n[upper.tri(ad.p.value.RSfMRIHC_n)])
+#sPET vs fMRI
+commonHC_sPET_fMRI<-ad.p.value.RSfMRIHC_n==1&p_zCorrMatCovHC==1
+commonHC_sPET_fMRI[lower.tri(commonHC_sPET_fMRI)]<-0
+
+#common edges binary
+commonHC_sPET_fMRI_bin<-ifelse(commonHC_sPET_fMRI == TRUE, yes = 1, no = 0)
+
+#count 1s in common edges
+count_sPETfMRI<-sum(commonHC_sPET_fMRI_bin[upper.tri(commonHC_sPET_fMRI_bin)])
+
+#calculate dice 
+DC_sPETfMRT=(2*count_sPETfMRI)/(count_fMRI+count_Cov)
+#0.61
+
+##PD
+#create ad p matrix for fMRI
+ad.pfMRI.PD<-Motor_RSfMRI_PDp<0.05
+
+fMRICorrPD_th<-matrix(RSfMRI_PD[ifelse(ad.pfMRI.PD, T, NA)], ncol = ncol(RSfMRI_PD))
+pfMRICorrPD_th<-fMRICorrPD_th>0
+
+ad.p.value.RSfMRIPD_n<-ifelse(pfMRICorrPD_th == TRUE, yes = 1, no = 0)
+ad.p.value.RSfMRIPD_n[is.na(ad.p.value.RSfMRIPD_n)]<-0
+ad.p.value.RSfMRIPD_n[lower.tri(ad.p.value.RSfMRIPD_n)]<-0
+
+count_fMRI_PD<-sum(ad.p.value.RSfMRIPD_n[upper.tri(ad.p.value.RSfMRIPD_n)])
+#sPET vs fMRI
+commonPD_sPET_fMRI<-ad.p.value.RSfMRIPD_n==1&p_zCorrMatCovPD==1
+commonPD_sPET_fMRI[lower.tri(commonPD_sPET_fMRI)]<-0
+
+#common edges binary
+commonPD_sPET_fMRI_bin<-ifelse(commonPD_sPET_fMRI == TRUE, yes = 1, no = 0)
+
+#count 1s in common edges
+count_sPETfMRI<-sum(commonPD_sPET_fMRI_bin[upper.tri(commonPD_sPET_fMRI_bin)])
+
+#count 1s in cov matrix
+p_zCorrMatCovPD[lower.tri(p_zCorrMatCovPD)]<-0
+count_Cov_PD<-sum(p_zCorrMatCovPD[upper.tri(p_zCorrMatCovPD)])
+
+#calculate dice 
+DCPD_sPETfMRT=(2*count_sPETfMRI)/(count_fMRI_PD+count_Cov_PD)
+#0.57
+
+
+#sPET vs fPET
+commonHC_fPET_sPET<-p_zCorrMatCovHC==1&ad.p.value.HC_n==1
+commonHC_fPET_sPET_bin<-ifelse(commonHC_fPET_sPET == TRUE, yes = 1, no = 0)
+
+count_sPETfPET<-sum(commonHC_fPET_sPET_bin[upper.tri(commonHC_fPET_sPET_bin)])
+
+DC_sPETfPET=(2*count_sPETfPET)/(count_fPET+count_Cov)
+#0.21
+
+#fPET vs fMRI
+commonHC_fPET_fMRI<-ad.p.value.RSfMRIHC_n==1&ad.p.value.HC_n==1
+commonHC_fPET_fMRI_bin<-ifelse(commonHC_fPET_fMRI == TRUE, yes = 1, no = 0)
+
+count_fPETfMRI<-sum(commonHC_fPET_fMRI_bin[upper.tri(commonHC_fPET_fMRI_bin)])
+
+DC_fPETfMRI=(2*count_fPETfMRI)/(count_fPET+count_fMRI)
+#0.34
+
+#sPET vs fPET
+commonPD_fPET_sPET<-p_zCorrMatCovPD==1&ad.p.value.PD_n==1
+commonPD_fPET_sPET_bin<-ifelse(commonPD_fPET_sPET == TRUE, yes = 1, no = 0)
+
+countPD_fPET<-sum(ad.p.value.PD_n[upper.tri(ad.p.value.PD_n)])
+#count 1s in common edges
+countPD_sPETfPET<-sum(commonPD_fPET_sPET_bin[upper.tri(commonPD_fPET_sPET_bin)])
+#degree for sPET only
+
+#calculate dice 
+DCPD_sPETfPET=(2*countPD_sPETfPET)/(countPD_fPET+countPD_Cov)
+#0.23
+
+#fPET vs fMRI
+commonPD_fPET_fMRI<-ad.p.value.RSfMRIPD_n==1&ad.p.value.PD_n==1
+commonPD_fPET_fMRI_bin<-ifelse(commonPD_fPET_fMRI == TRUE, yes = 1, no = 0)
+
+commonPD_fPET_fMRI_bin<-makeSymm(commonPD_fPET_fMRI_bin)
+#count 1s in common edges
+countPDfMRIfPET<-sum(commonPD_fPET_fMRI_bin[upper.tri(commonPD_fPET_fMRI_bin)])
+
+#calculate dice 
+DCPD_fMRIfPET=(2*countPDfMRIfPET)/(countPD_fPET+count_fMRI_PD)
+#0.41
+
+#multimodal degree
+count_ones_per_row <- function(matrix) {
+  num_rows <- nrow(matrix)
+  num_cols <- ncol(matrix)
+  
+  results <- vector(mode = "integer", length = num_rows)
+  
+  for (i in 1:num_rows) {
+    count <- 0
+    for (j in 1:num_cols) {
+      if (matrix[i, j] == 1) {
+        count <- count + 1
+      }
+    }
+    results[i] <- count
+  }
+  
+  return(results)
+}
+
+
+
+#sPET_fPET
+
+sym_common_HC_fPET_sPET_bin<-makeSymm(commonHC_fPET_sPET_bin)
+diag(sym_common_HC_fPET_sPET_bin)<-0
+
+#write.table(sym_common_HC_fPET_sPET_bin, #file="HCfPET_sPET_comp6.txt",dec=".",sep = "\t", row.names=FALSE, #col.names=FALSE)
+
+Degree_HC_fPET_sPET<-count_ones_per_row(sym_common_HC_fPET_sPET_bin)
+
+sym_commonPD_fPET_sPET_bin<-makeSymm(commonPD_fPET_sPET_bin)
+diag(sym_commonPD_fPET_sPET_bin)<-0
+
+#write.table(sym_commonPD_fPET_sPET_bin, #file="PDfPET_sPET_comp6.txt",dec=".",sep = "\t", row.names=FALSE, #col.names=FALSE)
+
+Degree_PD_fPET_sPET<-count_ones_per_row(sym_commonPD_fPET_sPET_bin)
+
+#for sPET_fMRI
+sym_commonHC_sPET_fMRI_bin<-makeSymm(commonHC_sPET_fMRI_bin)
+diag(sym_commonHC_sPET_fMRI_bin)<-0
+
+#write.table(sym_commonHC_sPET_fMRI_bin, #file="HCsPET_fMRI_comp6.txt",dec=".",sep = "\t", row.names=FALSE, #col.names=FALSE)
+
+Degree_HC_sPET_fMRI<-count_ones_per_row(sym_commonHC_sPET_fMRI_bin)
+
+sym_commonPD_sPET_fMRI_bin<-makeSymm(commonPD_sPET_fMRI_bin)
+diag(sym_commonPD_sPET_fMRI_bin)<-0
+
+#write.table(sym_commonPD_sPET_fMRI_bin, #file="PDsPET_fMRI_comp6.txt",dec=".",sep = "\t", row.names=FALSE, #col.names=FALSE)
+
+Degree_PD_sPET_fMRI<-count_ones_per_row(sym_commonPD_sPET_fMRI_bin)
+
+#fPET fMRI
+sym_commonHC_fPET_fMRI_bin<-makeSymm(commonHC_fPET_fMRI_bin)
+diag(sym_commonHC_fPET_fMRI_bin)<-0
+#write.table(sym_commonHC_fPET_fMRI_bin, file="HCfPET_fMRI_comp6.txt",dec=".",sep = "\t", row.names=FALSE, col.names=FALSE)
+
+Degree_HC_fPET_fMRI<-count_ones_per_row(sym_commonHC_fPET_fMRI_bin)
+
+sym_commonPD_fPET_fMRI_bin<-makeSymm(commonPD_fPET_fMRI_bin)
+diag(commonPD_fPET_fMRI_bin)<-0
+#write.table(sym_commonPD_fPET_fMRI_bin, file="PDfPET_fMRI_comp6.txt",dec=".",sep = "\t", row.names=FALSE, col.names=FALSE)
+
+Degree_PD_fPET_fMRI<-count_ones_per_row(sym_commonPD_fPET_fMRI_bin)
+
+#new data frame for boxplot, sPEt-fMRI
+boxplot_df_sPETfMRI<-data.frame("Degree"=c(Degree_HC_sPET_fMRI,Degree_PD_sPET_fMRI))
+
+
+boxplot_df_sPETfMRI$Diagnose<-c(rep("HC",44),rep("PD",44))
+
+
+boxplot_df_sPETfMRI$lobe<-c(rep("Cereb", 8), rep("SCGM",5),rep("Cortical Motor",6),rep("Cereb", 9),rep("SCGM",3),rep("Cortical Motor",6),rep("Cereb",7))
+
+boxplot_df_sPETfMRI$lobe<-factor(boxplot_df_sPETfMRI$lobe)
+
+
+stat.test <- boxplot_df_sPETfMRI %>%
+  group_by(lobe) %>%
+  t_test(Degree ~ Diagnose) %>%
+  adjust_pvalue(method = "BH") %>%
+  add_significance()
+stat.test
+
+# Create the plot
+
+#png(file="Moto_sPET_fMRI_Boxplot.png",
+ #  width=600, height=600)
+myplot <- ggboxplot(
+  boxplot_df_sPETfMRI, x = "Diagnose", y = "Degree",
+  fill = "Diagnose", 
+  palette = "npg", legend = "none",
+  ggtheme = theme_pubr(border = TRUE))+
+  scale_fill_manual(values=c("#FFEDA0","#9F0026"))+
+  facet_wrap(~lobe)
+
+# Add statistical test p-values
+stat.test <- stat.test %>% add_xy_position(x = "Diagnose")
+myplot + stat_pvalue_manual(stat.test, hide.ns=TRUE,label = "p.adj.signif")
+#dev.off()
+
+#new data frame for boxplot, sPET-fPET
+boxplot_df_sPETfPET<-data.frame("Degree"=c(Degree_HC_fPET_sPET,Degree_PD_fPET_sPET))
+
+
+boxplot_df_sPETfPET$Diagnose<-c(rep("HC",44),rep("PD",44))
+
+
+boxplot_df_sPETfPET$lobe<-c(rep("Cereb", 8), rep("SCGM",5),rep("Cortical Motor",6),rep("Cereb", 9),rep("SCGM",3),rep("Cortical Motor",6),rep("Cereb",7))
+
+boxplot_df_sPETfPET$lobe<-factor(boxplot_df_sPETfPET$lobe)
+
+
+
+stat.test <- boxplot_df_sPETfPET %>%
+  group_by(lobe) %>%
+  t_test(Degree ~ Diagnose) %>%
+  adjust_pvalue(method = "BH") %>%
+  add_significance()
+stat.test
+
+# Create the plot
+
+#png(file="Moto_sPET_fPET_Boxplot.png",
+ #   width=600, height=600)
+myplot <- ggboxplot(
+  boxplot_df_sPETfPET, x = "Diagnose", y = "Degree",
+  fill = "Diagnose", 
+  palette = "npg", legend = "none",
+  ggtheme = theme_pubr(border = TRUE))+
+  scale_fill_manual(values=c("#FFEDA0","#9F0026"))+
+  facet_wrap(~lobe)
+
+# Add statistical test p-values
+stat.test <- stat.test %>% add_xy_position(x = "Diagnose")
+myplot + stat_pvalue_manual(stat.test,hide.ns = TRUE, label = "p.adj.signif")
+#dev.off()
+
+#for fPET
+#new data frame for boxplot, fPET-fMRI
+boxplot_df_fMRIfPET<-data.frame("Degree"=c(Degree_HC_fPET_fMRI,Degree_PD_fPET_fMRI))
+
+boxplot_df_fMRIfPET$Diagnose<-c(rep("HC",44),rep("PD",44))
+
+
+boxplot_df_fMRIfPET$lobe<-c(rep("Cereb", 8), rep("SCGM",5),rep("Cortical Motor",6),rep("Cereb", 9),rep("SCGM",3),rep("Cortical Motor",6),rep("Cereb",7))
+
+boxplot_df_fMRIfPET$lobe<-factor(boxplot_df_fMRIfPET$lobe)
+
+
+stat.test <- boxplot_df_fMRIfPET %>%
+  group_by(lobe) %>%
+  t_test(Degree ~ Diagnose) %>%
+  adjust_pvalue(method = "BH") %>%
+  add_significance()
+stat.test
+
+# Create the plot
+
+#png(file="Moto_fMRIfPET_Boxplot.png",
+  #  width=600, height=600)
+myplot <- ggboxplot(
+  boxplot_df_fMRIfPET, x = "Diagnose", y = "Degree",
+  fill = "Diagnose", 
+  palette = "npg", legend = "none",
+  ggtheme = theme_pubr(border = TRUE))+
+  scale_fill_manual(values=c("#FFEDA0","#9F0026"))+
+  facet_wrap(~lobe)
+
+# Add statistical test p-values
+stat.test <- stat.test %>% add_xy_position(x = "Diagnose")
+myplot + stat_pvalue_manual(stat.test,hide.ns = TRUE, label = "p.adj.signif")
+#dev.off()
+
+#HC
+
+Degree_HCfPET<-count_ones_per_row(ad.p.value.HC_n)
+
+#PD
+#for fPET
+Degree_PDfPET<-count_ones_per_row(ad.p.value.PD_n)
+
+
+ 
+
+
+
+
+
+```
+
+```{r,error=TRUE}
+#compare connectivity strength
+
+#png(file="Conn_Str_fPET-sPETHC.png",
+  #  width=600, height=600)
+plot(c(CorrMatCovHC),c(meanzCorrHC))
+
+model<-lm(c(meanzCorrHC)~c(CorrMatCovHC))
+abline(model)
+text(x=-0.5,y=0.8,"r = 0.20", cex=1.5)
+
+#dev.off()
+
+cor.test(c(meanzCorrHC),c(CorrMatCovHC))
+
+#png(file="Conn_Str_fPET-sPETPD.png",
+   # width=600, height=600)
+plot(c(CorrMatCovPD),c(meanzCorrPD))
+
+model<-lm(c(meanzCorrPD)~c(CorrMatCovPD))
+abline(model)
+text(x=0,y=0.8,"r = 0.23", cex=1.5)
+#dev.off()
+
+cor.test(c(meanzCorrPD),c(CorrMatCovPD))
+
+
+#png(file="Conn_Str_fMRI-sPETPD.png",
+ #   width=600, height=600)
+plot(c(CorrMatCovPD),c(RSfMRI_PD))
+
+model<-lm(c(CorrMatCovPD)~c(RSfMRI_PD))
+abline(model)
+text(x=-0.2,y=0.8,"r = 0.20", cex=1.5)
+#dev.off()
+
+cor.test(c(CorrMatCovPD),c(RSfMRI_PD))
+#0.20
+
+
+#png(file="Conn_Str_fMRI-fPETPD.png",
+   #width=600, height=600)
+plot(c(meanzCorrPD),c(RSfMRI_PD))
+
+model<-lm(c(meanzCorrPD)~c(RSfMRI_PD))
+abline(model)
+text(x=0.8,y=0.8,"r = 0.55", cex=1.5)
+#dev.off()
+
+cor.test(c(meanzCorrPD),c(RSfMRI_PD))
+#0.55
+
+#png(file="Conn_Str_fMRI-fPETHC.png",
+ #  width=600, height=600)
+plot(c(meanzCorrHC),c(RSfMRI_HC))
+
+model<-lm(c(meanzCorrHC)~c(RSfMRI_HC))
+abline(model)
+text(x=0.6,y=0.8,"r = 0.66", cex=1.5)
+#dev.off()
+
+cor.test(c(meanzCorrHC),c(RSfMRI_HC))
+#0.66
+
+
+#png(file="Conn_Str_fMRI-sPETHC.png",
+  # width=600, height=600)
+plot(c(CorrMatCovHC),c(RSfMRI_HC))
+
+model<-lm(c(CorrMatCovHC)~c(RSfMRI_HC))
+abline(model)
+text(x=-0.6,y=0.8,"r = 0.38", cex=1.5)
+#dev.off()
+
+cor.test(c(CorrMatCovHC),c(RSfMRI_HC))
+#0.38
+
+```
+
+
+```{r,error=TRUE}
+#create ad p matrix for fMRI
+
+
+fMRICorrHC_th<-matrix(RSfMRI_HC[ifelse(ad.pfMRI.HC, T, NA)], ncol = ncol(RSfMRI_HC))
+
+
+
+#common edges plots
+pn_common_edges.HC<-fMRICorrHC_th>0&CorrMatCovHC_th>0|fMRICorrHC_th<0&CorrMatCovHC_th<0
+pn_common_edges.HC[fMRICorrHC_th>0&CorrMatCovHC_th>0]=1
+pn_common_edges.HC[fMRICorrHC_th<0&CorrMatCovHC_th<0]=-1
+pn_common_edges.HC[pn_common_edges.HC=="NA"]<-0
+
+colnames(pn_common_edges.HC)<-colnames(sRSfPET_MotorNet[,1:44])
+
+#dev.new()
+#png(file="commonedgespn_HC_GMdiv.png",
+  #  width=800)
+corrplot(pn_common_edges.HC, method="color",tl.pos="n", tl.offset=15,type= 'upper',col=c("#FEE38B","#9F0026"), na.label=" ",cl.ratio=0.2, tl.col="black",pch.cex=0.8,tl.cex=0.5, cl.cex=1.5)
+#add lines and names for segments
+text(x = rep(-8, 5), y = c(4,11,15,21,28,33,40), labels = c("Vermis","Cortical Motor","SCGM","Cereb","Cortical Motor", "SCGM","Cereb"), cex=1.5)
+text(x = c(3,10,13,21,27,30,38), y = rep(-5, 5),labels = c("Cereb","SCGM","Cortical Motor","Cereb","SCGM" ,"Cortical Motor","Vermis"),xpd=NA, srt=45, cex=1.5)
+segments(c(8.5,14.5,21.5,28.5,31.5,37.5), rep(0,4), 
+         c(8.5,14.5,21.5,28.5,31.5,37.5), rep(45,4), lwd=2)
+segments(rep(0,4), c(7.5,13.5,16.5,23.5,30.5,36.5),
+         rep(45,4),c(7.5,13.5,16.5,23.5,30.5,36.5), lwd=2)
+colorlegend(col=c("#FEE38B","#9F0026"),xlim=c(2,4), ylim=c(2,5),c(seq(0,1,.5)), align="l",labels=c("-"," ","+"), vertical=TRUE, addlabels=TRUE)
+#dev.off()
+
+#create ad p matrix for fMRI
+
+
+
+ad.pfMRI.PD<-Motor_RSfMRI_PDp<0.05
+
+fMRICorrPD_th<-matrix(RSfMRI_PD[ifelse(ad.pfMRI.PD, T, NA)], ncol = ncol(RSfMRI_PD))
+
+#common edges plots
+pn_common_edges.PD<-fMRICorrPD_th>0&CorrMatCovPD_th>0|fMRICorrPD_th<0&CorrMatCovPD_th<0
+pn_common_edges.PD[fMRICorrPD_th>0&CorrMatCovPD_th>0]=1
+pn_common_edges.PD[fMRICorrPD_th<0&CorrMatCovPD_th<0]=-1
+pn_common_edges.PD[pn_common_edges.PD==NA]<-0
+
+
+colnames(pn_common_edges.PD)<-colnames(sRSfPET_MotorNet[,1:44])
+
+#dev.new()
+#png(file="commonedgespn_PD_GMdiv.png",
+  # width=800)
+corrplot(pn_common_edges.PD, method="color",tl.pos="n", tl.offset=15,type= 'upper',col=c("#FEE38B","#9F0026"), na.label=" ",cl.ratio=0.2, tl.col="black",pch.cex=0.8,tl.cex=0.5, cl.cex=1.5)
+#add lines and names for segments
+segments(c(8.5,14.5,21.5,28.5,31.5,37.5), rep(0,4), 
+         c(8.5,14.5,21.5,28.5,31.5,37.5), rep(45,4), lwd=2)
+segments(rep(0,4), c(7.5,13.5,16.5,23.5,30.5,36.5),
+         rep(45,4),c(7.5,13.5,16.5,23.5,30.5,36.5), lwd=2)
+text(x = rep(-8, 5), y = c(4,11,15,21,28,33,40), labels = c("Vermis","Cortical Motor","SCGM","Cereb","Cortical Motor", "SCGM","Cereb"), cex=1.5)
+text(x = c(3,10,13,21,27,30,38), y = rep(-5, 5),labels = c("Cereb","SCGM","Cortical Motor","Cereb","SCGM" ,"Cortical Motor","Vermis"),xpd=NA, srt=45, cex=1.5)
+
+colorlegend(col=c("#FEE38B","#9F0026"),xlim=c(2,4), ylim=c(2,5),c(seq(0,1,.5)), align="l",labels=c("-"," ","+"), vertical=TRUE, addlabels=TRUE)
+#dev.off()
+
+#fPET vs fMRI
+#common edges plot with pos and neg
+
+pn_common_edges.PD<-fMRICorrPD_th>0&meanzCorrPD_th>0|fMRICorrPD_th<0&meanzCorrPD_th<0
+pn_common_edges.PD[fMRICorrPD_th>0&meanzCorrPD_th>0]=1
+pn_common_edges.PD[fMRICorrPD_th<0&meanzCorrPD_th<0]=-1
+pn_common_edges.PD[pn_common_edges.PD=="NA"]<-0
+
+colnames(pn_common_edges.PD)<-colnames(sRSfPET_MotorNet[,1:44])
+#rownames(pn_common_edges.PD)<-rownames(RSfPET_aal[,1:116])
+
+
+#dev.new()
+#png(file="commonedges_fMRI_fPET_PD_GMdiv.png",
+ #   width=800)
+corrplot(pn_common_edges.PD, method="color",is.corr=FALSE,tl.pos="n", tl.offset=15,type= 'upper',col=c("#FEE38B","#9F0026"), na.label=" ",cl.ratio=0.2, tl.col="black",pch.cex=0.8,tl.cex=0.5, cl.cex=1.5)
+#add lines and names for segments
+colorlegend(col=c("#FEE38B","#9F0026"),xlim=c(2,4), ylim=c(2,5),c(seq(0,1,.5)), align="l",labels=c("-"," ","+"), vertical=TRUE, addlabels=TRUE)
+segments(c(8.5,14.5,21.5,28.5,31.5,37.5), rep(0,4), 
+         c(8.5,14.5,21.5,28.5,31.5,37.5), rep(45,4), lwd=2)
+segments(rep(0,4), c(7.5,13.5,16.5,23.5,30.5,36.5),
+         rep(45,4),c(7.5,13.5,16.5,23.5,30.5,36.5), lwd=2)
+text(x = rep(-8, 5), y = c(4,11,15,21,28,33,40), labels = c("Vermis","Cortical Motor","SCGM","Cereb","Cortical Motor", "SCGM","Cereb"), cex=1.5)
+text(x = c(3,10,13,21,27,30,38), y = rep(-5, 5),labels = c("Cereb","SCGM","Cortical Motor","Cereb","SCGM" ,"Cortical Motor","Vermis"),xpd=NA, srt=45, cex=1.5)
+
+#dev.off()
+#fPET vs fMRI
+#common edges plot with pos and neg
+
+pn_common_edges.HC<-fMRICorrHC_th>0&meanzCorrHC_th>0|fMRICorrHC_th<0&meanzCorrHC_th<0
+pn_common_edges.HC[fMRICorrHC_th>0&meanzCorrHC_th>0]=1
+pn_common_edges.HC[fMRICorrHC_th<0&meanzCorrHC_th<0]=-1
+pn_common_edges.HC[pn_common_edges.HC=="NA"]<-0
+
+colnames(pn_common_edges.HC)<-colnames(sRSfPET_MotorNet[,1:44])
+#rownames(pn_common_edges.PD)<-rownames(RSfPET_aal[,1:116])
+
+
+
+#dev.new()
+#png(file="commonedges_fMRI_fPET_HC_GMdiv.png",
+ #  width=800)
+corrplot(pn_common_edges.HC, method="color",is.corr=FALSE,tl.pos="n", tl.offset=15,type= 'upper',col=c("#FEE38B","#9F0026"), na.label=" ",cl.ratio=0.2, tl.col="black",pch.cex=0.8,tl.cex=0.5, cl.cex=1.5)
+#add lines and names for segments
+segments(c(8.5,14.5,21.5,28.5,31.5,37.5), rep(0,4), 
+         c(8.5,14.5,21.5,28.5,31.5,37.5), rep(45,4), lwd=2)
+segments(rep(0,4), c(7.5,13.5,16.5,23.5,30.5,36.5),
+         rep(45,4),c(7.5,13.5,16.5,23.5,30.5,36.5), lwd=2)
+text(x = rep(-8, 5), y = c(4,11,15,21,28,33,40), labels = c("Vermis","Cortical Motor","SCGM","Cereb","Cortical Motor", "SCGM","Cereb"), cex=1.5)
+text(x = c(3,10,13,21,27,30,38), y = rep(-5, 5),labels = c("Cereb","SCGM","Cortical Motor","Cereb","SCGM" ,"Cortical Motor","Vermis"),xpd=NA, srt=45, cex=1.5)
+colorlegend(col=c("#FEE38B","#9F0026"),xlim=c(2,4), ylim=c(2,5),c(seq(0,1,.5)), align="l",labels=c("-"," ","+"), vertical=TRUE, addlabels=TRUE)
+
+#dev.off()
+
+#sPET vs fPET
+
+#common edges plot with pos and neg
+pn_common_edges.HC<-meanzCorrHC_th>0&CorrMatCovHC_th>0|meanzCorrHC_th<0&CorrMatCovHC_th<0
+pn_common_edges.HC[meanzCorrHC_th>0&CorrMatCovHC_th>0]=1
+pn_common_edges.HC[meanzCorrHC_th<0&CorrMatCovHC_th<0]=-1
+pn_common_edges.HC[pn_common_edges.HC=="NA"]<-0
+
+colnames(pn_common_edges.HC)<-colnames(sRSfPET_MotorNet[,1:44])
+
+#png(file="commonedges_sPET_fPET_HC_GMdiv.png",
+    #width=800)
+corrplot(pn_common_edges.HC, method="color",is.corr=FALSE,tl.pos="n", tl.offset=15,type= 'upper',col=c("#FEE38B","#9F0026"), na.label=" ",cl.ratio=0.2, tl.col="black",pch.cex=0.8,tl.cex=0.5, cl.cex=1.5)
+#add lines and names for segments
+segments(c(8.5,14.5,21.5,28.5,31.5,37.5), rep(0,4), 
+         c(8.5,14.5,21.5,28.5,31.5,37.5), rep(45,4), lwd=2)
+segments(rep(0,4), c(7.5,13.5,16.5,23.5,30.5,36.5),
+         rep(45,4),c(7.5,13.5,16.5,23.5,30.5,36.5), lwd=2)
+text(x = rep(-8, 5), y = c(4,11,15,21,28,33,40), labels = c("Vermis","Cortical Motor","SCGM","Cereb","Cortical Motor", "SCGM","Cereb"), cex=1.5)
+text(x = c(3,10,13,21,27,30,38), y = rep(-5, 5),labels = c("Cereb","SCGM","Cortical Motor","Cereb","SCGM" ,"Cortical Motor","Vermis"),xpd=NA, srt=45, cex=1.5)
+
+colorlegend(col=c("#FEE38B","#9F0026"),xlim=c(2,4), ylim=c(2,5),c(seq(0,1,.5)), align="l",labels=c("-"," ","+"), vertical=TRUE, addlabels=TRUE)
+
+#dev.off()
+
+#common edges plot with pos and neg
+pn_common_edges.PD<-meanzCorrPD_th>0&CorrMatCovPD_th>0|meanzCorrPD_th<0&CorrMatCovPD_th<0
+pn_common_edges.PD[meanzCorrPD_th>0&CorrMatCovPD_th>0]=1
+pn_common_edges.PD[meanzCorrPD_th<0&CorrMatCovPD_th<0]=-1
+pn_common_edges.PD[pn_common_edges.PD=="NA"]<-0
+pn_common_edges.PD[pn_common_edges.PD==0]<-NA
+
+colnames(pn_common_edges.PD)<-colnames(sRSfPET_MotorNet[,1:44])
+
+#png(file="commonedges_sPET_fPET_PD_GMdiv.png",
+  # width=800)
+corrplot(pn_common_edges.PD, method="color",tl.pos="n", tl.offset=15,type= 'upper',col=c("#FEE38B","#9F0026"), na.label=" ",cl.ratio=0.2, tl.col="black",pch.cex=0.8,tl.cex=0.5, cl.cex=1.5)
+#add lines and names for segments
+segments(c(8.5,14.5,21.5,28.5,31.5,37.5), rep(0,4), 
+         c(8.5,14.5,21.5,28.5,31.5,37.5), rep(45,4), lwd=2)
+segments(rep(0,4), c(7.5,13.5,16.5,23.5,30.5,36.5),
+         rep(45,4),c(7.5,13.5,16.5,23.5,30.5,36.5), lwd=2)
+text(x = rep(-8, 5), y = c(4,11,15,21,28,33,40), labels = c("Vermis","Cortical Motor","SCGM","Cereb","Cortical Motor", "SCGM","Cereb"), cex=1.5)
+text(x = c(3,10,13,21,27,30,38), y = rep(-5, 5),labels = c("Cereb","SCGM","Cortical Motor","Cereb","SCGM" ,"Cortical Motor","Vermis"),xpd=NA, srt=45, cex=1.5)
+
+colorlegend(col=c("#FEE38B","#9F0026"),xlim=c(2,4), ylim=c(2,5),c(seq(0,1,.5)), align="l",labels=c("-"," ","+"), vertical=TRUE, addlabels=TRUE)
+
+#dev.off()
+
+
+#for sPET
+#HC
+Degree_HCsPET<-count_ones_per_row(p_zCorrMatCovHC)
+
+#PD
+#for sPET
+
+Degree_PDsPET<-count_ones_per_row(p_zCorrMatCovPD)
+
+
+
+
+aalM_LRnodes<-read.delim("Node_AAL116_motocomp6.txt",header=FALSE)
+
+aalM_LRnodes[,5]<-Degree_HC_fPET_sPET
+write.table(aalM_LRnodes,file="AALMotor_nodes_fPETsPET_HC.txt", sep="\t", col.names=FALSE,row.names=FALSE)
+
+aalM_LRnodes[,5]<-Degree_PD_fPET_sPET
+write.table(aalM_LRnodes,file="AALMotor_nodes_fPETsPET_PD.txt", sep="\t", col.names=FALSE,row.names=FALSE)
+
+aalM_LRnodes[,5]<-Degree_HC_fPET_fMRI
+write.table(aalM_LRnodes,file="AALMotor_nodes_fPETfMRI_HC.txt", sep="\t", col.names=FALSE,row.names=FALSE)
+
+aalM_LRnodes[,5]<-Degree_PD_fPET_fMRI
+write.table(aalM_LRnodes,file="AALMotor_nodes_fPETfMRI_PD.txt", sep="\t", col.names=FALSE,row.names=FALSE)
+
+aalM_LRnodes[,5]<-Degree_HC_sPET_fMRI
+write.table(aalM_LRnodes,file="AALMotor_nodes_sPETfMRI_HC.txt", sep="\t", col.names=FALSE,row.names=FALSE)
+
+aalM_LRnodes[,5]<-Degree_PD_sPET_fMRI
+write.table(aalM_LRnodes,file="AALMotor_nodes_sPETfMRI_PD.txt", sep="\t", col.names=FALSE,row.names=FALSE)
+
+```
+
