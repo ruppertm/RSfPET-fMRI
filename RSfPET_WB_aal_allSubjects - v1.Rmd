@@ -1,0 +1,1697 @@
+---
+title: "RSfPET_WB_aal_allSubjects"
+author: "Marina"
+date: "2023-12-27"
+output: html_document
+---
+
+```{r setup}
+#fPET data script
+#extracted from aal116 atlas regions
+#extracted raw data 
+
+#set working directory to new directory with fMRI data and fPET data 
+setwd("~/Promotion/RS-fPET/Analysen/whole_brain/3mm/HC-10_3mm")
+
+#list packages
+pags<-list("openxlsx", "reshape", "plyr", "corrplot", "ggplot2","reshape2","ggpubr","tidyverse","rstatix")
+# packages for: loading xlsx files
+#long/wide tranform
+#rstatic, tidyverse + ggpubr for boxplot panels
+
+
+#load packages
+lapply(pags, require, character.only=TRUE)
+
+##Define functions
+
+#function for returning individual cor.test pvalue per cor in data matrix compatible with corrplot
+rcor.pvalue<-function (mat, ...) {
+  mat <- data.matrix(mat)
+  p <- ncol(mat)
+  index <- t(combn(p, 2))
+  nindex <- nrow(index)
+  p_mat<- matrix(nrow = p, ncol = p)
+  
+  for (i in 1:nindex) {
+    p_mat[index[i,1], index[i,2]]<-cor.test(mat[, index[i,1]], mat[, index[i,2]], ...)$p.value
+  }
+  
+  pMat <- p_mat
+  colnames(pMat)<-colnames(mat)
+  rownames(pMat)<-colnames(mat)
+  diag(pMat)<-0
+  
+  pMat
+}
+
+
+#load excel file
+RSfPET_aal<-read.xlsx(xlsxFile = "AllSub_aal116_3mm.xlsx", sheet = "Tabelle1",
+                      colNames = TRUE)
+
+#define color ramp for corrplot
+col5<-colorRampPalette(c("#FFEDA0",  "#FEE38B", "#FED976", "#FEC661", "#FEB24C",  "#FEA044", "#FD8D3C",  "#FD6E33", "#FC4E2A", "#F03423", "#E31A1C",  "#D00D21", "#BD0026", "#9F0026", "#800026","#690019")) 
+
+
+#read global mean values from file
+my_globals <- read.delim("globals_3mm.txt",header=FALSE, sep=",")
+
+
+
+```
+
+
+```{r}
+#define new colnames
+
+colnames(RSfPET_aal)<-c("Cereb6_R","Cereb7b_L","Cereb7b_R", "Cereb8_L","Cereb8_R",
+                        "Cereb9_L", "Cereb9_R","Cereb10_L","Cereb10_R","Vermis 1_2",
+                        "Frontal_Mid_orb_R1","Vermis3","Vermis 4_5", "Vermis 6",
+                        "Vermis 7","Vermis 8","Vermis 9","Vermis 10","Frontal_inf_oper_L",
+                        "Frontal_inf_oper_R", "Frontal_inf_tri_L", "Frontal_inf_tri_R",
+                        "Frontal_inf_orb_L", "Frontal_inf_orb_R","Rolandic_oper_L",
+                        "Rolandic_oper_R","SMA_L","PreC_L", "SMA_R","Olfactory_L",
+                        "Olfactory_R", "Frontal_Sup_med_L","Frontal_Sup_med_R",
+                        "Frontal_Mid_orb_L2",	"Frontal_Mid_orb_R2","Rectus_L",
+                        "Rectus_R","Insula_L", "Precentral_R","Insula_R",
+                        "Cingulum_ant_L","Cingulum_ant_R","Cingulum_mid_L",
+                        "Cingulum_mid_R","Cingulum_post_L",
+                        "Cingulum_post_R","Hippocampus_L","Hippocampus_R",
+                        "Parahippocampal_L","Frontal_Sup_L",	"Parahippocampal_R",
+                        "Amygdala_L", "Amygdala_R","Calcarine_L", "Calcarine_R",
+                        "Cuneus_L", "Cuneus_R","Lingual_L","Lingual_R",
+                        "Occipital_sup_L",	"Frontal_sup_R","Occipital_sup_R",
+                        "Occipital_Mid_L","Occipital_Mid_R",
+                        "Occipital_inf_L","Occipital_inf_R","Fusiform_L","Fusiform_R",
+                        "Postcentral_L", "Postcentral_R","Parietal_sup_L",
+                        "Frontal_sup_Orb_L","Parietal_sup_R","Parietal_inf_L","Parietal_inf_R",
+                        "SupraMarginal_L","SupraMarginal_R","Angular_L", "Angular_R",
+                        "Precuneus_L","Precuneus_R","Paracentral_L","Frontal_sup_orb_R",
+                        "Paracentral_R","Caudate_L","Putamen_L","Putamen_R",
+                        "Pallidum_L", "Pallidum_R",	"Thalamus_L","Thalamus_R",
+                        "Heschl_L","Frontal_mid_L",	"Heschl_R","Temporal_Sup_L",
+                        "Temporal_Sup_R",	"Temporal_pole_sup_L",	"Temporal_pole_sup_R",
+                        "Temporal_Mid_L","Temporal_Mid_R","Temporal_pole_mid_L", "Temporal_pole_mid_R","Temporal_inf_L",
+                        "Frontal_mid_R","Temporal_inf_R","Cereb_Crus1_L",
+                        "Cereb_Crus1_R","Cereb_Crus2_L","Cereb_Crus2_R",	
+                        "Cereb_3L","Cereb_3R","Cereb_45_L",	"Cereb_45_R",
+                        "Cereb_6L","Frontal_Mid_orb_L1","Caudate_R")
+
+#define new data frame, devided by globals element-wise
+WBL_R_aal<-RSfPET_aal[,1:116]/my_globals[1:810,]
+
+#define subject variable subject id 
+subject_id<-c(rep("RS_fPET001",30), rep("RS_fPET002",30), rep("RS_fPET003",30),rep("RS_fPET004",30), rep("RS_fPET005",30),rep("RS_fPET006",30),rep("RS_fPET007",30),rep("RS_fPET008",30),rep("RS_fPET010",30),
+              rep("RS_fPET011",30),rep("RS_fPET012",30),rep("RS_fPET014",30),rep("RS_fPET015",30),rep("RS_fPET016",30),
+              rep("RS_fPET017",30),
+              rep("RS_fPET018",30),rep("RS_fPET019",30),rep("RS_fPET020",30), rep("RS_fPET021",30),rep("RS_fPET022",30),rep("RS_fPET023",30),rep("RS_fPET024",30),rep("RS_fPET025",30),
+              rep("RS_fPET026",30),rep("RS_fPET027",30),rep("RS_fPET028",30),rep("RS_fPET029",30))
+
+
+#add record id to new data frame and convert into factor
+WBL_R_aal$record_id<-subject_id
+WBL_R_aal$record_id<-factor(WBL_R_aal$record_id<-subject_id)
+
+#add diagnose to gm removed data set 
+WBL_R_aal$diagnose[WBL_R_aal$record_id=="RS_fPET001"|WBL_R_aal$record_id=="RS_fPET002"|WBL_R_aal$record_id=="RS_fPET003"|WBL_R_aal$record_id=="RS_fPET005"|WBL_R_aal$record_id=="RS_fPET007"|WBL_R_aal$record_id=="RS_fPET008"|WBL_R_aal$record_id=="RS_fPET010"|WBL_R_aal$record_id=="RS_fPET014"|WBL_R_aal$record_id=="RS_fPET016"|WBL_R_aal$record_id=="RS_fPET022"|WBL_R_aal$record_id=="RS_fPET025"|WBL_R_aal$record_id=="RS_fPET026"|WBL_R_aal$record_id=="RS_fPET028"|WBL_R_aal$record_id=="RS_fPET029"]= "PD"
+
+WBL_R_aal$diagnose[WBL_R_aal$record_id=="RS_fPET004"|WBL_R_aal$record_id=="RS_fPET006"|WBL_R_aal$record_id=="RS_fPET011"|WBL_R_aal$record_id=="RS_fPET012"|WBL_R_aal$record_id=="RS_fPET015"|WBL_R_aal$record_id=="RS_fPET017"|WBL_R_aal$record_id=="RS_fPET018"|WBL_R_aal$record_id=="RS_fPET019"|WBL_R_aal$record_id=="RS_fPET020"|WBL_R_aal$record_id=="RS_fPET021"|WBL_R_aal$record_id=="RS_fPET023"|WBL_R_aal$record_id=="RS_fPET024"|WBL_R_aal$record_id=="RS_fPET027"]= "HC"
+
+#convert diagnose into factor
+WBL_R_aal$diagnose<-factor(WBL_R_aal$diagnose)
+
+#add additional subjects here
+time<-c(rep(61:90, 27)) #repeat time points 61- 90 16 x
+
+WBL_R_aal$time<-time
+
+
+```
+
+
+```{r, echo=FALSE, error=TRUE}
+
+#define lobes according to AAL region names with L/R for later sorting
+Frontal_L<-WBL_R_aal[,c("PreC_L","Frontal_Sup_L","Frontal_sup_Orb_L","Frontal_mid_L","Frontal_Mid_orb_L1","Frontal_inf_oper_L","Frontal_inf_tri_L","Frontal_inf_orb_L","Rolandic_oper_L","SMA_L","Olfactory_L","Frontal_Sup_med_L","Frontal_Mid_orb_L2")]
+Cereb_L<-WBL_R_aal[,c("Cereb_Crus1_L","Cereb_Crus2_L","Cereb_3L","Cereb_45_L","Cereb_6L","Cereb7b_L","Cereb8_L","Cereb9_L","Cereb10_L")]
+Subcortical_L<-WBL_R_aal[,c("Rectus_L","Insula_L","Cingulum_ant_L","Cingulum_mid_L","Cingulum_post_L","Hippocampus_L","Parahippocampal_L","Amygdala_L","Caudate_L","Putamen_L","Pallidum_L","Thalamus_L")]
+Occipital_L<-WBL_R_aal[,c("Calcarine_L","Cuneus_L","Lingual_L","Occipital_sup_L","Occipital_Mid_L", "Occipital_inf_L","Fusiform_L")]
+Parietal_L<-WBL_R_aal[,c("Postcentral_L","Parietal_sup_L","Parietal_inf_L", "SupraMarginal_L","Angular_L","Precuneus_L","Paracentral_L")]
+Temporal_L<-WBL_R_aal[,c("Heschl_L","Temporal_Sup_L","Temporal_pole_sup_L","Temporal_Mid_L","Temporal_pole_mid_L","Temporal_inf_L")]
+Frontal_R<-WBL_R_aal[,c("Precentral_R","Frontal_sup_R","Frontal_sup_orb_R","Frontal_mid_R","Frontal_Mid_orb_R1","Frontal_inf_oper_R","Frontal_inf_tri_R","Frontal_inf_orb_R","Rolandic_oper_R","SMA_R","Olfactory_R","Frontal_Sup_med_R", "Frontal_Mid_orb_R2")]
+Cereb_R<-WBL_R_aal[,c("Cereb_Crus1_R","Cereb_Crus2_R","Cereb_3R","Cereb_45_R","Cereb6_R","Cereb7b_R","Cereb8_R","Cereb9_R","Cereb10_R")]
+
+Vermis<-WBL_R_aal[,c("Vermis 1_2","Vermis3","Vermis 4_5", "Vermis 6","Vermis 7","Vermis 8","Vermis 9","Vermis 10")]
+
+Temporal_R<-WBL_R_aal[,c("Temporal_inf_R","Temporal_Sup_R","Temporal_pole_sup_R","Temporal_pole_mid_R",
+                         "Temporal_Mid_R","Heschl_R")]
+
+Subcortical_R<-WBL_R_aal[,c("Rectus_R","Insula_R","Cingulum_ant_R","Cingulum_mid_R","Cingulum_post_R","Hippocampus_R","Parahippocampal_R","Amygdala_R","Caudate_R","Putamen_R",
+                            "Pallidum_R","Thalamus_R")]
+Occipital_R<-WBL_R_aal[,c("Calcarine_R","Cuneus_R","Lingual_R","Occipital_sup_R","Occipital_Mid_R",
+                          "Occipital_inf_R","Fusiform_R")]
+Parietal_R<-WBL_R_aal[,c("Postcentral_R","Parietal_sup_R","Parietal_inf_R","SupraMarginal_R","Angular_R","Precuneus_R","Paracentral_R")] 
+
+#bind lobes together into one data frame
+WBL_R_aal<-cbind(Frontal_L,Subcortical_L,Temporal_L,Parietal_L,Occipital_L, Cereb_L,
+                 Frontal_R,Subcortical_R, Temporal_R, Parietal_R, Occipital_R, Cereb_R, Vermis)
+
+#add record id to sorted data frame and convert into factor
+subject_id<-c(rep("RS_fPET001",30), rep("RS_fPET002",30), rep("RS_fPET003",30),rep("RS_fPET004",30), rep("RS_fPET005",30),rep("RS_fPET006",30),rep("RS_fPET007",30),rep("RS_fPET008",30),rep("RS_fPET010",30),
+              rep("RS_fPET011",30),rep("RS_fPET012",30),rep("RS_fPET014",30),rep("RS_fPET015",30),rep("RS_fPET016",30),
+              rep("RS_fPET017",30),
+              rep("RS_fPET018",30),rep("RS_fPET019",30),rep("RS_fPET020",30), rep("RS_fPET021",30),rep("RS_fPET022",30),rep("RS_fPET023",30),rep("RS_fPET024",30),rep("RS_fPET025",30),
+              rep("RS_fPET026",30),rep("RS_fPET027",30),rep("RS_fPET028",30),rep("RS_fPET029",30))
+WBL_R_aal$record_id<-subject_id
+
+WBL_R_aal$record_id<-factor(WBL_R_aal$record_id<-subject_id)
+
+
+#add diagnose to gm removed, sorted data set 
+WBL_R_aal$diagnose[WBL_R_aal$record_id=="RS_fPET001"|WBL_R_aal$record_id=="RS_fPET002"|WBL_R_aal$record_id=="RS_fPET003"|WBL_R_aal$record_id=="RS_fPET005"|WBL_R_aal$record_id=="RS_fPET007"|WBL_R_aal$record_id=="RS_fPET008"|WBL_R_aal$record_id=="RS_fPET010"|WBL_R_aal$record_id=="RS_fPET014"|WBL_R_aal$record_id=="RS_fPET016"|WBL_R_aal$record_id=="RS_fPET022"|WBL_R_aal$record_id=="RS_fPET025"|WBL_R_aal$record_id=="RS_fPET026"|WBL_R_aal$record_id=="RS_fPET028"|WBL_R_aal$record_id=="RS_fPET029"]= "PD"
+
+WBL_R_aal$diagnose[WBL_R_aal$record_id=="RS_fPET004"|WBL_R_aal$record_id=="RS_fPET006"|WBL_R_aal$record_id=="RS_fPET011"|WBL_R_aal$record_id=="RS_fPET012"|WBL_R_aal$record_id=="RS_fPET015"|WBL_R_aal$record_id=="RS_fPET017"|WBL_R_aal$record_id=="RS_fPET018"|WBL_R_aal$record_id=="RS_fPET019"|WBL_R_aal$record_id=="RS_fPET020"|WBL_R_aal$record_id=="RS_fPET021"|WBL_R_aal$record_id=="RS_fPET023"|WBL_R_aal$record_id=="RS_fPET024"|WBL_R_aal$record_id=="RS_fPET027"]= "HC"
+#convert diagnose into factor
+WBL_R_aal$diagnose<-factor(WBL_R_aal$diagnose)
+
+WBL_R_aal$time<-time
+
+
+#calculate mean uptake for each ROI per subject
+MeanUptake<-aggregate(WBL_R_aal[,1:116], by = list(WBL_R_aal$record_id, WBL_R_aal$diagnose), FUN=mean)
+
+```
+
+```{r, error=TRUE}
+#PD
+#in groups
+PD<-subset(MeanUptake,Group.2=="PD")
+
+#correlation matrix ROI-based uptake values
+CorrMatCovPD<-cor(PD[,3:118], use = "complete.obs", method="pearson")
+
+diag(CorrMatCovPD)<-1
+
+#generate p matrix for corrplot
+p.Mat.PD<-rcor.pvalue(PD[,3:118], method="pearson")
+diag(p.Mat.PD)<-1
+
+#with p-based selection on upper diagonal
+#png(file="corrplot_Cov_PD_aal_GMdiv.png",
+    #width=800, height=600)
+corrplot(CorrMatCovPD, method="color",col=col5(50) , is.corr=FALSE,tl.offset=10,cl.ratio=0.2, tl.pos="n",tl.col="black",tl.cex=0.5, cl.cex=1.5,p.mat=p.Mat.PD, sig.level = 0.05, insig = "blank" )
+segments(c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(0,4), 
+         c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(117,4), lwd=2)
+segments(rep(0,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), rep(117,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), lwd=2)
+text(x = rep(-10, 7), y = c(5,13,20,28,35,45,57,67,75,83,88,98,111), labels = c("Vermis","Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal", "Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal"), cex=1.5)
+text(x = c(3,13,23,30,36,43,57,67,77,84,91,98,109), y = rep(-7, 7),labels = c("Frontal","Subcortical","Temporal","Parietal","Occipital","Cerebelum","Frontal", "Subcortical","Temporal","Parietal","Occipital","Cerebelum","Vermis"),xpd=NA, srt=45, cex=1.5)
+#dev.off()
+
+
+
+#HC
+HC<-subset(MeanUptake,Group.2=="HC")
+
+#correlation matrix ROI-based uptake values
+CorrMatCovHC<-cor(HC[,3:118], use = "complete.obs", method="pearson")
+diag(CorrMatCovHC)<-1
+
+#generate p matrix for corrplot
+p.Mat.HC<-rcor.pvalue(HC[,3:118], method="pearson")
+diag(p.Mat.HC)<-1
+
+
+#p-based with significant in upper diagonal
+#png(file="corrplot_CovHC_aal_GMdiv.png",
+  #  width=800, height=600)
+corrplot(CorrMatCovHC, method="color",col=col5(50) , is.corr=FALSE,tl.offset=10, tl.pos="n",cl.ratio=0.2, tl.col="black",tl.cex=0.5, cl.cex=1.5,p.mat=p.Mat.HC, sig.level = 0.05, insig = "blank" )
+segments(c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(0,4), 
+         c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(117,4), lwd=2)
+segments(rep(0,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), rep(117,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), lwd=2)
+text(x = rep(-10, 7), y = c(5,13,20,28,35,45,57,67,75,83,88,98,111), labels = c("Vermis","Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal", "Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal"),cex=1.5)
+text(x = c(3,13,23,30,36,43,57,67,77,84,91,98,109), y = rep(-7, 7),labels = c("Frontal","Subcortical","Temporal","Parietal","Occipital","Cerebelum","Frontal", "Subcortical","Temporal","Parietal","Occipital","Cerebelum","Vermis"),xpd=NA, srt=45,cex=1.5)
+#dev.off()
+
+
+#z transform coeffs for groups
+#HC
+CorrMatCovHC<-cor(HC[,3:118], use = "complete.obs", method="pearson")
+zCorrMatCovHC<-atanh(CorrMatCovHC)
+diag(zCorrMatCovHC)<-1
+
+#png(file="corrplot_zCovHC_aal_GMdiv.png",
+    #width=800, height=600)
+corrplot(zCorrMatCovHC, method="color" ,col=col5(50), p.mat=p.Mat.HC,is.corr=FALSE,tl.pos="n",cl.ratio=0.2, tl.offset=10,tl.col="black",pch.cex=0.8,tl.cex=0.5, cl.cex=1.5, sig.level = 0.05, insig = "blank" )
+segments(c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(0,4), 
+         c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(117,4), lwd=2)
+segments(rep(0,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), rep(117,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), lwd=2)
+text(x = rep(-10, 7), y = c(5,13,20,28,35,45,57,67,75,83,88,98,111), labels = c("Vermis","Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal", "Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal"),cex=1.5)
+text(x = c(3,13,23,30,36,43,57,67,77,84,91,98,109), y = rep(-7, 7),labels = c("Frontal","Subcortical","Temporal","Parietal","Occipital","Cerebelum","Frontal", "Subcortical","Temporal","Parietal","Occipital","Cerebelum","Vermis"),xpd=NA, srt=45, cex=1.5)
+#dev.off()
+
+#PD
+CorrMatCovPD<-cor(PD[,3:118], use = "complete.obs", method="pearson")
+zCorrMatCovPD<-atanh(CorrMatCovPD)
+diag(zCorrMatCovPD)<-1
+
+
+
+#png(file="corrplot_zCovPD_aal_GMdiv.png",
+    #width=800, height=600)
+corrplot(zCorrMatCovPD, method="color" ,col=col5(50), p.mat=p.Mat.PD,is.corr=FALSE,tl.pos="n",cl.ratio=0.2, tl.offset=10,tl.col="black",pch.cex=0.8,tl.cex=0.5, cl.cex=1.5, sig.level = 0.05, insig = "blank" )
+segments(c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(0,4), 
+         c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(117,4), lwd=2)
+segments(rep(0,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), rep(117,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), lwd=2)
+text(x = rep(-10, 7), y = c(5,13,20,28,35,45,57,67,75,83,88,98,111), labels = c("Vermis","Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal", "Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal"), cex=1.5)
+text(x = c(3,13,23,30,36,43,57,67,77,84,91,98,109), y = rep(-7, 7),labels = c("Frontal","Subcortical","Temporal","Parietal","Occipital","Cerebelum","Frontal", "Subcortical","Temporal","Parietal","Occipital","Cerebelum","Vermis"),xpd=NA, srt=45, cex=1.5)
+#dev.off()
+
+```
+
+
+
+```{r, error=TRUE,warning=FALSE}
+#HC
+##adjacency matrixes for common edges
+#matrix with only significant corrs
+
+CorrMatCovHC<-cor(HC[,3:118], use = "complete.obs", method="pearson")
+zCorrMatCovHC<-atanh(CorrMatCovHC)
+
+#create adjacency matrix for HC (positive only)
+#significant connections T/F
+ad.p.Mat.HC<-p.Mat.HC<0.05
+
+
+#with only signif. corrs up right
+#matrix with significant connections with numbers in corr
+zCorrMatCovHC_th <- matrix(zCorrMatCovHC[ifelse(ad.p.Mat.HC, T, NA)], ncol = ncol(zCorrMatCovHC))
+
+colnames(zCorrMatCovHC_th)<-colnames(WBL_R_aal[,1:116])
+
+#change into numbers for binary
+#all significant with one (also neg)
+ad.p.Mat.HC_n<-ifelse(ad.p.Mat.HC == TRUE, yes = 1, no = 0)
+
+
+#same for non z-transf
+#matrix with only significant corrs
+#matrix with significant in numbers (corr)
+CorrMatCovHC_th <- matrix(CorrMatCovHC[ifelse(ad.p.Mat.HC, T, NA)], ncol = ncol(CorrMatCovHC))
+
+colnames(CorrMatCovHC_th)<-colnames(WBL_R_aal[,1:116])
+
+
+#two-colored pos+ neg adges
+#search in significant connections for >0 and refill with 1, others = 0 (negt)
+pn_zCorrMatCovHC_th<-ifelse(zCorrMatCovHC_th >0, yes = 1, no = 0)
+
+
+
+
+#PD
+#matrix with only significant corrs
+CorrMatCovPD<-cor(PD[,3:118], use = "complete.obs", method="pearson")
+zCorrMatCovPD<-atanh(CorrMatCovPD)
+
+#create adjacency matrix for HC (positive only)
+#T vs. F significant or not (pos and neg)
+ad.p.Mat.PD<-p.Mat.PD<0.05
+
+
+#with only signif. corrs up right
+#significant connections with numbers (corrs) pos and neg
+zCorrMatCovPD_th <- matrix(zCorrMatCovPD[ifelse(ad.p.Mat.PD, T, NA)], ncol = ncol(zCorrMatCovPD))
+
+colnames(zCorrMatCovPD_th)<-colnames(WBL_R_aal[,1:116])
+
+
+
+#change into numbers for binary 
+#all significant connections as binary (pos and neg) 
+ad.p.Mat.PD_n<-ifelse(ad.p.Mat.PD == TRUE, yes = 1, no = 0)
+
+
+#same for non z-transf
+#matrix with only significant corrs
+#matrix with significant connections with numbers (corrs) pos and neg
+CorrMatCovPD_th <- matrix(CorrMatCovPD[ifelse(ad.p.Mat.PD, T, NA)], ncol = ncol(CorrMatCovHC))
+
+colnames(CorrMatCovPD_th)<-colnames(WBL_R_aal[,1:116])
+
+
+#two-colored pos+ neg edges
+#search in significant connections for >0 and refill with 1, others 0 =neg
+pn_zCorrMatCovPD_th<-ifelse(zCorrMatCovPD_th >0, yes = 1, no = 0)
+
+
+
+```
+
+
+```{r, error=TRUE}
+#read MRI connectivity data from csv
+
+#read csv
+RSfMRI_PD <- read.csv(file = "beta_SBC_01_PD_rest.csv",head = TRUE, sep=";")
+
+i<-c(1:116)
+RSfMRI_PD[ , i] <- apply(RSfMRI_PD[ , i], 2,            #
+                         function(x) as.numeric(as.character(x)))
+
+RSfMRI_PD<-as.matrix(RSfMRI_PD)
+
+
+#without first column
+RSfMRI_PD<-RSfMRI_PD[,2:117]
+
+#rownames same as colnames
+rownames(RSfMRI_PD)<-colnames(RSfMRI_PD)
+
+
+#sort after Lobuli
+Frontal_L<-RSfMRI_PD[,c("AAL_Precentral_L","AAL_Frontal_Sup_L","AAL_Frontal_Sup_Orb_L","AAL_Frontal_Mid_L","AAL_Frontal_Mid_Orb_L1","AAL_Frontal_Inf_Oper_L","AAL_Frontal_Inf_Tri_L","AAL_Frontal_Inf_Orb_L","AAL_Rolandic_Oper_L","AAL_Supp_Motor_Area_L","AAL_Olfactory_L","AAL_Frontal_Sup_Medial_L","AAL_Frontal_Mid_Orb_L2")]
+Cereb_L<-RSfMRI_PD[,c("AAL_Cerebelum_Crus1_L","AAL_Cerebelum_Crus2_L","AAL_Cerebelum_3_L","AAL_Cerebelum_4_5_L","AAL_Cerebelum_6_L","AAL_Cerebelum_7b_L","AAL_Cerebelum_8_L","AAL_Cerebelum_9_L","AAL_Cerebelum_10_L")]
+Subcortical_L<-RSfMRI_PD[,c("AAL_Rectus_L","AAL_Insula_L","AAL_Cingulum_Ant_L","AAL_Cingulum_Mid_L","AAL_Cingulum_Post_L","AAL_Hippocampus_L","AAL_ParaHippocampal_L","AAL_Amygdala_L","AAL_Caudate_L","AAL_Putamen_L","AAL_Pallidum_L","AAL_Thalamus_L")]
+Occipital_L<-RSfMRI_PD[,c("AAL_Calcarine_L","AAL_Cuneus_L","AAL_Lingual_L","AAL_Occipital_Sup_L","AAL_Occipital_Mid_L", "AAL_Occipital_Inf_L","AAL_Fusiform_L")]
+Parietal_L<-RSfMRI_PD[,c("AAL_Postcentral_L","AAL_Parietal_Sup_L","AAL_Parietal_Inf_L", "AAL_SupraMarginal_L","AAL_Angular_L","AAL_Precuneus_L","AAL_Paracentral_Lobule_L")]
+Temporal_L<-RSfMRI_PD[,c("AAL_Heschl_L","AAL_Temporal_Sup_L","AAL_Temporal_Pole_Sup_L","AAL_Temporal_Mid_L","AAL_Temporal_Pole_Mid_L","AAL_Temporal_Inf_L")]
+
+Frontal_R<-RSfMRI_PD[,c("AAL_Precentral_R","AAL_Frontal_Sup_R","AAL_Frontal_Sup_Orb_R","AAL_Frontal_Mid_R","AAL_Frontal_Mid_Orb_R1","AAL_Frontal_Inf_Oper_R","AAL_Frontal_Inf_Tri_R","AAL_Frontal_Inf_Orb_R","AAL_Rolandic_Oper_R","AAL_Supp_Motor_Area_R","AAL_Olfactory_R","AAL_Frontal_Sup_Medial_R", "AAL_Frontal_Mid_Orb_R2")]
+Cereb_R<-RSfMRI_PD[,c("AAL_Cerebelum_Crus1_R","AAL_Cerebelum_Crus2_R","AAL_Cerebelum_3_R","AAL_Cerebelum_4_5_R","AAL_Cerebelum_6_R","AAL_Cerebelum_7b_R","AAL_Cerebelum_8_R","AAL_Cerebelum_9_R","AAL_Cerebelum_10_R")]
+
+
+Vermis<-RSfMRI_PD[,c("AAL_Vermis_1_2","AAL_Vermis_3","AAL_Vermis_4_5", "AAL_Vermis_6","AAL_Vermis_7","AAL_Vermis_8","AAL_Vermis_9","AAL_Vermis_10")]
+
+Temporal_R<-RSfMRI_PD[,c("AAL_Temporal_Inf_R","AAL_Temporal_Sup_R","AAL_Temporal_Pole_Sup_R","AAL_Temporal_Pole_Mid_R",
+                         "AAL_Temporal_Mid_R","AAL_Heschl_R")]
+
+Subcortical_R<-RSfMRI_PD[,c("AAL_Rectus_R","AAL_Insula_R","AAL_Cingulum_Ant_R","AAL_Cingulum_Mid_R","AAL_Cingulum_Post_R","AAL_Hippocampus_R","AAL_ParaHippocampal_R","AAL_Amygdala_R","AAL_Caudate_R","AAL_Putamen_R",
+                            "AAL_Pallidum_R","AAL_Thalamus_R")]
+Occipital_R<-RSfMRI_PD[,c("AAL_Calcarine_R","AAL_Cuneus_R","AAL_Lingual_R","AAL_Occipital_Sup_R","AAL_Occipital_Mid_R",
+                          "AAL_Occipital_Inf_R","AAL_Fusiform_R")]
+Parietal_R<-RSfMRI_PD[,c("AAL_Postcentral_R","AAL_Parietal_Sup_R","AAL_Parietal_Inf_R","AAL_SupraMarginal_R","AAL_Angular_R","AAL_Precuneus_R","AAL_Paracentral_Lobule_R")] 
+
+RSfMRI_PD_aal<-cbind(Frontal_L,Subcortical_L,Temporal_L,Parietal_L,Occipital_L, Cereb_L,
+                     Frontal_R,Subcortical_R, Temporal_R, Parietal_R, Occipital_R, Cereb_R, Vermis)
+
+
+#sort after Lobuli vertical
+Frontal_LV<-RSfMRI_PD_aal[c("AAL_Precentral_L","AAL_Frontal_Sup_L","AAL_Frontal_Sup_Orb_L","AAL_Frontal_Mid_L","AAL_Frontal_Mid_Orb_L1","AAL_Frontal_Inf_Oper_L","AAL_Frontal_Inf_Tri_L","AAL_Frontal_Inf_Orb_L","AAL_Rolandic_Oper_L","AAL_Supp_Motor_Area_L","AAL_Olfactory_L","AAL_Frontal_Sup_Medial_L","AAL_Frontal_Mid_Orb_L2"),]
+Cereb_LV<-RSfMRI_PD_aal[c("AAL_Cerebelum_Crus1_L","AAL_Cerebelum_Crus2_L","AAL_Cerebelum_3_L","AAL_Cerebelum_4_5_L","AAL_Cerebelum_6_L","AAL_Cerebelum_7b_L","AAL_Cerebelum_8_L","AAL_Cerebelum_9_L","AAL_Cerebelum_10_L"),]
+Subcortical_LV<-RSfMRI_PD_aal[c("AAL_Rectus_L","AAL_Insula_L","AAL_Cingulum_Ant_L","AAL_Cingulum_Mid_L","AAL_Cingulum_Post_L","AAL_Hippocampus_L","AAL_ParaHippocampal_L","AAL_Amygdala_L","AAL_Caudate_L","AAL_Putamen_L","AAL_Pallidum_L","AAL_Thalamus_L"),]
+Occipital_LV<-RSfMRI_PD_aal[c("AAL_Calcarine_L","AAL_Cuneus_L","AAL_Lingual_L","AAL_Occipital_Sup_L","AAL_Occipital_Mid_L", "AAL_Occipital_Inf_L","AAL_Fusiform_L"),]
+Parietal_LV<-RSfMRI_PD_aal[c("AAL_Postcentral_L","AAL_Parietal_Sup_L","AAL_Parietal_Inf_L", "AAL_SupraMarginal_L","AAL_Angular_L","AAL_Precuneus_L","AAL_Paracentral_Lobule_L"),]
+Temporal_LV<-RSfMRI_PD_aal[c("AAL_Heschl_L","AAL_Temporal_Sup_L","AAL_Temporal_Pole_Sup_L","AAL_Temporal_Mid_L","AAL_Temporal_Pole_Mid_L","AAL_Temporal_Inf_L"),]
+
+Frontal_RV<-RSfMRI_PD_aal[c("AAL_Precentral_R","AAL_Frontal_Sup_R","AAL_Frontal_Sup_Orb_R","AAL_Frontal_Mid_R","AAL_Frontal_Mid_Orb_R1","AAL_Frontal_Inf_Oper_R","AAL_Frontal_Inf_Tri_R","AAL_Frontal_Inf_Orb_R","AAL_Rolandic_Oper_R","AAL_Supp_Motor_Area_R","AAL_Olfactory_R","AAL_Frontal_Sup_Medial_R", "AAL_Frontal_Mid_Orb_R2"),]
+Cereb_RV<-RSfMRI_PD_aal[c("AAL_Cerebelum_Crus1_R","AAL_Cerebelum_Crus2_R","AAL_Cerebelum_3_R","AAL_Cerebelum_4_5_R","AAL_Cerebelum_6_R","AAL_Cerebelum_7b_R","AAL_Cerebelum_8_R","AAL_Cerebelum_9_R","AAL_Cerebelum_10_R"),]
+
+VermisV<-RSfMRI_PD_aal[c("AAL_Vermis_1_2","AAL_Vermis_3","AAL_Vermis_4_5", "AAL_Vermis_6","AAL_Vermis_7","AAL_Vermis_8","AAL_Vermis_9","AAL_Vermis_10"),]
+
+Temporal_RV<-RSfMRI_PD_aal[c("AAL_Temporal_Inf_R","AAL_Temporal_Sup_R","AAL_Temporal_Pole_Sup_R","AAL_Temporal_Pole_Mid_R",
+                             "AAL_Temporal_Mid_R","AAL_Heschl_R"),]
+
+Subcortical_RV<-RSfMRI_PD_aal[c("AAL_Rectus_R","AAL_Insula_R","AAL_Cingulum_Ant_R","AAL_Cingulum_Mid_R","AAL_Cingulum_Post_R","AAL_Hippocampus_R","AAL_ParaHippocampal_R","AAL_Amygdala_R","AAL_Caudate_R","AAL_Putamen_R",
+                                "AAL_Pallidum_R","AAL_Thalamus_R"),]
+Occipital_RV<-RSfMRI_PD_aal[c("AAL_Calcarine_R","AAL_Cuneus_R","AAL_Lingual_R","AAL_Occipital_Sup_R","AAL_Occipital_Mid_R",
+                              "AAL_Occipital_Inf_R","AAL_Fusiform_R"),]
+Parietal_RV<-RSfMRI_PD_aal[c("AAL_Postcentral_R","AAL_Parietal_Sup_R","AAL_Parietal_Inf_R","AAL_SupraMarginal_R","AAL_Angular_R","AAL_Precuneus_R","AAL_Paracentral_Lobule_R"),] 
+
+RSfMRI_PD_aal<-rbind(Frontal_LV,Subcortical_LV,Temporal_LV,Parietal_LV,Occipital_LV, Cereb_LV,
+                     Frontal_RV,Subcortical_RV, Temporal_RV, Parietal_RV, Occipital_RV, Cereb_RV, VermisV)
+
+
+#add pmatrix 
+RSfMRI_PDp <- read.csv(file = "p_SBC_01_PD_rest.csv", head = TRUE, sep=";")
+
+i<-c(1:116)
+RSfMRI_PDp[ , i] <- apply(RSfMRI_PDp[ , i], 2,            # Specify own function within apply
+                          function(x) as.numeric(as.character(x)))
+RSfMRI_PDp<-as.matrix(RSfMRI_PDp)
+
+
+RSfMRI_PDp<-RSfMRI_PDp[,2:117]
+
+rownames(RSfMRI_PDp)<-colnames(RSfMRI_PDp)
+
+
+Frontal_L<-RSfMRI_PDp[,c("AAL_Precentral_L","AAL_Frontal_Sup_L","AAL_Frontal_Sup_Orb_L","AAL_Frontal_Mid_L","AAL_Frontal_Mid_Orb_L1","AAL_Frontal_Inf_Oper_L","AAL_Frontal_Inf_Tri_L","AAL_Frontal_Inf_Orb_L","AAL_Rolandic_Oper_L","AAL_Supp_Motor_Area_L","AAL_Olfactory_L","AAL_Frontal_Sup_Medial_L","AAL_Frontal_Mid_Orb_L2")]
+Cereb_L<-RSfMRI_PDp[,c("AAL_Cerebelum_Crus1_L","AAL_Cerebelum_Crus2_L","AAL_Cerebelum_3_L","AAL_Cerebelum_4_5_L","AAL_Cerebelum_6_L","AAL_Cerebelum_7b_L","AAL_Cerebelum_8_L","AAL_Cerebelum_9_L","AAL_Cerebelum_10_L")]
+Subcortical_L<-RSfMRI_PDp[,c("AAL_Rectus_L","AAL_Insula_L","AAL_Cingulum_Ant_L","AAL_Cingulum_Mid_L","AAL_Cingulum_Post_L","AAL_Hippocampus_L","AAL_ParaHippocampal_L","AAL_Amygdala_L","AAL_Caudate_L","AAL_Putamen_L","AAL_Pallidum_L","AAL_Thalamus_L")]
+Occipital_L<-RSfMRI_PDp[,c("AAL_Calcarine_L","AAL_Cuneus_L","AAL_Lingual_L","AAL_Occipital_Sup_L","AAL_Occipital_Mid_L", "AAL_Occipital_Inf_L","AAL_Fusiform_L")]
+Parietal_L<-RSfMRI_PDp[,c("AAL_Postcentral_L","AAL_Parietal_Sup_L","AAL_Parietal_Inf_L", "AAL_SupraMarginal_L","AAL_Angular_L","AAL_Precuneus_L","AAL_Paracentral_Lobule_L")]
+Temporal_L<-RSfMRI_PDp[,c("AAL_Heschl_L","AAL_Temporal_Sup_L","AAL_Temporal_Pole_Sup_L","AAL_Temporal_Mid_L","AAL_Temporal_Pole_Mid_L","AAL_Temporal_Inf_L")]
+
+Frontal_R<-RSfMRI_PDp[,c("AAL_Precentral_R","AAL_Frontal_Sup_R","AAL_Frontal_Sup_Orb_R","AAL_Frontal_Mid_R","AAL_Frontal_Mid_Orb_R1","AAL_Frontal_Inf_Oper_R","AAL_Frontal_Inf_Tri_R","AAL_Frontal_Inf_Orb_R","AAL_Rolandic_Oper_R","AAL_Supp_Motor_Area_R","AAL_Olfactory_R","AAL_Frontal_Sup_Medial_R", "AAL_Frontal_Mid_Orb_R2")]
+Cereb_R<-RSfMRI_PDp[,c("AAL_Cerebelum_Crus1_R","AAL_Cerebelum_Crus2_R","AAL_Cerebelum_3_R","AAL_Cerebelum_4_5_R","AAL_Cerebelum_6_R","AAL_Cerebelum_7b_R","AAL_Cerebelum_8_R","AAL_Cerebelum_9_R","AAL_Cerebelum_10_R")]
+
+Vermis<-RSfMRI_PDp[,c("AAL_Vermis_1_2","AAL_Vermis_3","AAL_Vermis_4_5", "AAL_Vermis_6","AAL_Vermis_7","AAL_Vermis_8","AAL_Vermis_9","AAL_Vermis_10")]
+
+Temporal_R<-RSfMRI_PDp[,c("AAL_Temporal_Inf_R","AAL_Temporal_Sup_R","AAL_Temporal_Pole_Sup_R","AAL_Temporal_Pole_Mid_R",
+                          "AAL_Temporal_Mid_R","AAL_Heschl_R")]
+
+Subcortical_R<-RSfMRI_PDp[,c("AAL_Rectus_R","AAL_Insula_R","AAL_Cingulum_Ant_R","AAL_Cingulum_Mid_R","AAL_Cingulum_Post_R","AAL_Hippocampus_R","AAL_ParaHippocampal_R","AAL_Amygdala_R","AAL_Caudate_R","AAL_Putamen_R",
+                             "AAL_Pallidum_R","AAL_Thalamus_R")]
+Occipital_R<-RSfMRI_PDp[,c("AAL_Calcarine_R","AAL_Cuneus_R","AAL_Lingual_R","AAL_Occipital_Sup_R","AAL_Occipital_Mid_R",
+                           "AAL_Occipital_Inf_R","AAL_Fusiform_R")]
+Parietal_R<-RSfMRI_PDp[,c("AAL_Postcentral_R","AAL_Parietal_Sup_R","AAL_Parietal_Inf_R","AAL_SupraMarginal_R","AAL_Angular_R","AAL_Precuneus_R","AAL_Paracentral_Lobule_R")] 
+
+RSfMRI_PDp_aal<-cbind(Frontal_L,Subcortical_L,Temporal_L,Parietal_L,Occipital_L, Cereb_L,
+                      Frontal_R,Subcortical_R, Temporal_R, Parietal_R, Occipital_R, Cereb_R, Vermis)
+
+#sort after Lobuli vertical
+Frontal_LV<-RSfMRI_PDp_aal[c("AAL_Precentral_L","AAL_Frontal_Sup_L","AAL_Frontal_Sup_Orb_L","AAL_Frontal_Mid_L","AAL_Frontal_Mid_Orb_L1","AAL_Frontal_Inf_Oper_L","AAL_Frontal_Inf_Tri_L","AAL_Frontal_Inf_Orb_L","AAL_Rolandic_Oper_L","AAL_Supp_Motor_Area_L","AAL_Olfactory_L","AAL_Frontal_Sup_Medial_L","AAL_Frontal_Mid_Orb_L2"),]
+Cereb_LV<-RSfMRI_PDp_aal[c("AAL_Cerebelum_Crus1_L","AAL_Cerebelum_Crus2_L","AAL_Cerebelum_3_L","AAL_Cerebelum_4_5_L","AAL_Cerebelum_6_L","AAL_Cerebelum_7b_L","AAL_Cerebelum_8_L","AAL_Cerebelum_9_L","AAL_Cerebelum_10_L"),]
+Subcortical_LV<-RSfMRI_PDp_aal[c("AAL_Rectus_L","AAL_Insula_L","AAL_Cingulum_Ant_L","AAL_Cingulum_Mid_L","AAL_Cingulum_Post_L","AAL_Hippocampus_L","AAL_ParaHippocampal_L","AAL_Amygdala_L","AAL_Caudate_L","AAL_Putamen_L","AAL_Pallidum_L","AAL_Thalamus_L"),]
+Occipital_LV<-RSfMRI_PDp_aal[c("AAL_Calcarine_L","AAL_Cuneus_L","AAL_Lingual_L","AAL_Occipital_Sup_L","AAL_Occipital_Mid_L", "AAL_Occipital_Inf_L","AAL_Fusiform_L"),]
+Parietal_LV<-RSfMRI_PDp_aal[c("AAL_Postcentral_L","AAL_Parietal_Sup_L","AAL_Parietal_Inf_L", "AAL_SupraMarginal_L","AAL_Angular_L","AAL_Precuneus_L","AAL_Paracentral_Lobule_L"),]
+Temporal_LV<-RSfMRI_PDp_aal[c("AAL_Heschl_L","AAL_Temporal_Sup_L","AAL_Temporal_Pole_Sup_L","AAL_Temporal_Mid_L","AAL_Temporal_Pole_Mid_L","AAL_Temporal_Inf_L"),]
+
+Frontal_RV<-RSfMRI_PDp_aal[c("AAL_Precentral_R","AAL_Frontal_Sup_R","AAL_Frontal_Sup_Orb_R","AAL_Frontal_Mid_R","AAL_Frontal_Mid_Orb_R1","AAL_Frontal_Inf_Oper_R","AAL_Frontal_Inf_Tri_R","AAL_Frontal_Inf_Orb_R","AAL_Rolandic_Oper_R","AAL_Supp_Motor_Area_R","AAL_Olfactory_R","AAL_Frontal_Sup_Medial_R", "AAL_Frontal_Mid_Orb_R2"),]
+Cereb_RV<-RSfMRI_PDp_aal[c("AAL_Cerebelum_Crus1_R","AAL_Cerebelum_Crus2_R","AAL_Cerebelum_3_R","AAL_Cerebelum_4_5_R","AAL_Cerebelum_6_R","AAL_Cerebelum_7b_R","AAL_Cerebelum_8_R","AAL_Cerebelum_9_R","AAL_Cerebelum_10_R"),]
+
+VermisV<-RSfMRI_PDp_aal[c("AAL_Vermis_1_2","AAL_Vermis_3","AAL_Vermis_4_5", "AAL_Vermis_6","AAL_Vermis_7","AAL_Vermis_8","AAL_Vermis_9","AAL_Vermis_10"),]
+
+Temporal_RV<-RSfMRI_PDp_aal[c("AAL_Temporal_Inf_R","AAL_Temporal_Sup_R","AAL_Temporal_Pole_Sup_R","AAL_Temporal_Pole_Mid_R",
+                              "AAL_Temporal_Mid_R","AAL_Heschl_R"),]
+
+Subcortical_RV<-RSfMRI_PDp_aal[c("AAL_Rectus_R","AAL_Insula_R","AAL_Cingulum_Ant_R","AAL_Cingulum_Mid_R","AAL_Cingulum_Post_R","AAL_Hippocampus_R","AAL_ParaHippocampal_R","AAL_Amygdala_R","AAL_Caudate_R","AAL_Putamen_R",
+                                 "AAL_Pallidum_R","AAL_Thalamus_R"),]
+Occipital_RV<-RSfMRI_PD_aal[c("AAL_Calcarine_R","AAL_Cuneus_R","AAL_Lingual_R","AAL_Occipital_Sup_R","AAL_Occipital_Mid_R",
+                              "AAL_Occipital_Inf_R","AAL_Fusiform_R"),]
+Parietal_RV<-RSfMRI_PDp_aal[c("AAL_Postcentral_R","AAL_Parietal_Sup_R","AAL_Parietal_Inf_R","AAL_SupraMarginal_R","AAL_Angular_R","AAL_Precuneus_R","AAL_Paracentral_Lobule_R"),] 
+
+RSfMRI_PDp_aal<-rbind(Frontal_LV,Subcortical_LV,Temporal_LV,Parietal_LV,Occipital_LV, Cereb_LV,
+                      Frontal_RV,Subcortical_RV, Temporal_RV, Parietal_RV, Occipital_RV, Cereb_RV, VermisV)
+
+diag(RSfMRI_PDp_aal)<-1
+#lower tri 0 
+RSfMRI_PDp_aal[lower.tri(RSfMRI_PDp_aal)]<-0
+
+
+diag(RSfMRI_PD_aal)<-1
+
+#png(file="corrplot_fMRI_aal_PD_GMdiv_all.png",
+  #  width=800, height=600)
+corrplot(RSfMRI_PD_aal, method="color", col=col5(50), is.corr=FALSE,tl.pos="n",cl.ratio=0.2, tl.offset=10,tl.col="black",pch.cex=0.8,tl.cex=0.5, cl.cex=1.5, sig.level = 0.05, na.label="  ",p.mat=RSfMRI_PDp_aal,insig = "blank" )
+segments(c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(0,4), 
+         c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(117,4), lwd=2)
+segments(rep(0,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), rep(117,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), lwd=2)
+text(x = rep(-10, 7), y = c(5,13,20,28,35,45,57,67,75,83,88,98,111), labels = c("Vermis","Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal", "Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal"),cex=1.5)
+text(x = c(3,13,23,30,36,43,57,67,77,84,91,98,109), y = rep(-7, 7),labels = c("Frontal","Subcortical","Temporal","Parietal","Occipital","Cerebelum","Frontal", "Subcortical","Temporal","Parietal","Occipital","Cerebelum","Vermis"),xpd=NA, srt=45, cex=1.5)
+#dev.off()
+
+#compare sPET and fMRI values
+#png(file="cross-corrplot_fMRI_sPET_PD_all.png",
+# width=600, height=600)
+par(oma=c(3,3,3,3)) #
+par(mar=c(6,6,4,2) + 0.1)
+plot(zCorrMatCovPD,RSfMRI_PD_aal,ylab="Hemodynamic Connectivity",xlab="sPET Connectivity", cex.axis=2,cex.lab=2)
+diag(zCorrMatCovPD)<-NA
+regmod_uptake<-lm( c(RSfMRI_PD_aal)~c(zCorrMatCovPD))
+
+abline(regmod_uptake)
+text(x=-1,y=1,"r = 0.35", cex=2)
+
+#dev.off()
+
+cor.test(c(zCorrMatCovPD),c(RSfMRI_PD_aal))
+summary(regmod_uptake)
+
+
+#read MRI connectivity data from csv
+
+#read csv
+RSfMRI_HC <- read.csv(file = "beta_SBC_01_HC_-10_rest.csv",head = TRUE, sep=";")
+
+i<-c(1:116)
+RSfMRI_HC[ , i] <- apply(RSfMRI_HC[ , i], 2,            #
+                         function(x) as.numeric(as.character(x)))
+
+RSfMRI_HC<-as.matrix(RSfMRI_HC)
+
+
+#without first column
+RSfMRI_HC<-RSfMRI_HC[,2:117]
+
+
+rownames(RSfMRI_HC)<-colnames(RSfMRI_HC)
+
+
+#sort after Lobuli
+Frontal_L<-RSfMRI_HC[,c("AAL_Precentral_L","AAL_Frontal_Sup_L","AAL_Frontal_Sup_Orb_L","AAL_Frontal_Mid_L","AAL_Frontal_Mid_Orb_L1","AAL_Frontal_Inf_Oper_L","AAL_Frontal_Inf_Tri_L","AAL_Frontal_Inf_Orb_L","AAL_Rolandic_Oper_L","AAL_Supp_Motor_Area_L","AAL_Olfactory_L","AAL_Frontal_Sup_Medial_L","AAL_Frontal_Mid_Orb_L2")]
+Cereb_L<-RSfMRI_HC[,c("AAL_Cerebelum_Crus1_L","AAL_Cerebelum_Crus2_L","AAL_Cerebelum_3_L","AAL_Cerebelum_4_5_L","AAL_Cerebelum_6_L","AAL_Cerebelum_7b_L","AAL_Cerebelum_8_L","AAL_Cerebelum_9_L","AAL_Cerebelum_10_L")]
+Subcortical_L<-RSfMRI_HC[,c("AAL_Rectus_L","AAL_Insula_L","AAL_Cingulum_Ant_L","AAL_Cingulum_Mid_L","AAL_Cingulum_Post_L","AAL_Hippocampus_L","AAL_ParaHippocampal_L","AAL_Amygdala_L","AAL_Caudate_L","AAL_Putamen_L","AAL_Pallidum_L","AAL_Thalamus_L")]
+Occipital_L<-RSfMRI_HC[,c("AAL_Calcarine_L","AAL_Cuneus_L","AAL_Lingual_L","AAL_Occipital_Sup_L","AAL_Occipital_Mid_L", "AAL_Occipital_Inf_L","AAL_Fusiform_L")]
+Parietal_L<-RSfMRI_HC[,c("AAL_Postcentral_L","AAL_Parietal_Sup_L","AAL_Parietal_Inf_L", "AAL_SupraMarginal_L","AAL_Angular_L","AAL_Precuneus_L","AAL_Paracentral_Lobule_L")]
+Temporal_L<-RSfMRI_HC[,c("AAL_Heschl_L","AAL_Temporal_Sup_L","AAL_Temporal_Pole_Sup_L","AAL_Temporal_Mid_L","AAL_Temporal_Pole_Mid_L","AAL_Temporal_Inf_L")]
+
+Frontal_R<-RSfMRI_HC[,c("AAL_Precentral_R","AAL_Frontal_Sup_R","AAL_Frontal_Sup_Orb_R","AAL_Frontal_Mid_R","AAL_Frontal_Mid_Orb_R1","AAL_Frontal_Inf_Oper_R","AAL_Frontal_Inf_Tri_R","AAL_Frontal_Inf_Orb_R","AAL_Rolandic_Oper_R","AAL_Supp_Motor_Area_R","AAL_Olfactory_R","AAL_Frontal_Sup_Medial_R", "AAL_Frontal_Mid_Orb_R2")]
+Cereb_R<-RSfMRI_HC[,c("AAL_Cerebelum_Crus1_R","AAL_Cerebelum_Crus2_R","AAL_Cerebelum_3_R","AAL_Cerebelum_4_5_R","AAL_Cerebelum_6_R","AAL_Cerebelum_7b_R","AAL_Cerebelum_8_R","AAL_Cerebelum_9_R","AAL_Cerebelum_10_R")]
+
+
+Vermis<-RSfMRI_HC[,c("AAL_Vermis_1_2","AAL_Vermis_3","AAL_Vermis_4_5", "AAL_Vermis_6","AAL_Vermis_7","AAL_Vermis_8","AAL_Vermis_9","AAL_Vermis_10")]
+
+Temporal_R<-RSfMRI_HC[,c("AAL_Temporal_Inf_R","AAL_Temporal_Sup_R","AAL_Temporal_Pole_Sup_R","AAL_Temporal_Pole_Mid_R",
+                         "AAL_Temporal_Mid_R","AAL_Heschl_R")]
+
+Subcortical_R<-RSfMRI_HC[,c("AAL_Rectus_R","AAL_Insula_R","AAL_Cingulum_Ant_R","AAL_Cingulum_Mid_R","AAL_Cingulum_Post_R","AAL_Hippocampus_R","AAL_ParaHippocampal_R","AAL_Amygdala_R","AAL_Caudate_R","AAL_Putamen_R",
+                            "AAL_Pallidum_R","AAL_Thalamus_R")]
+Occipital_R<-RSfMRI_HC[,c("AAL_Calcarine_R","AAL_Cuneus_R","AAL_Lingual_R","AAL_Occipital_Sup_R","AAL_Occipital_Mid_R",
+                          "AAL_Occipital_Inf_R","AAL_Fusiform_R")]
+Parietal_R<-RSfMRI_HC[,c("AAL_Postcentral_R","AAL_Parietal_Sup_R","AAL_Parietal_Inf_R","AAL_SupraMarginal_R","AAL_Angular_R","AAL_Precuneus_R","AAL_Paracentral_Lobule_R")] 
+
+RSfMRI_HC_aal<-cbind(Frontal_L,Subcortical_L,Temporal_L,Parietal_L,Occipital_L, Cereb_L,
+                     Frontal_R,Subcortical_R, Temporal_R, Parietal_R, Occipital_R, Cereb_R, Vermis)
+
+
+#sort after Lobuli vertical
+Frontal_LV<-RSfMRI_HC_aal[c("AAL_Precentral_L","AAL_Frontal_Sup_L","AAL_Frontal_Sup_Orb_L","AAL_Frontal_Mid_L","AAL_Frontal_Mid_Orb_L1","AAL_Frontal_Inf_Oper_L","AAL_Frontal_Inf_Tri_L","AAL_Frontal_Inf_Orb_L","AAL_Rolandic_Oper_L","AAL_Supp_Motor_Area_L","AAL_Olfactory_L","AAL_Frontal_Sup_Medial_L","AAL_Frontal_Mid_Orb_L2"),]
+Cereb_LV<-RSfMRI_HC_aal[c("AAL_Cerebelum_Crus1_L","AAL_Cerebelum_Crus2_L","AAL_Cerebelum_3_L","AAL_Cerebelum_4_5_L","AAL_Cerebelum_6_L","AAL_Cerebelum_7b_L","AAL_Cerebelum_8_L","AAL_Cerebelum_9_L","AAL_Cerebelum_10_L"),]
+Subcortical_LV<-RSfMRI_HC_aal[c("AAL_Rectus_L","AAL_Insula_L","AAL_Cingulum_Ant_L","AAL_Cingulum_Mid_L","AAL_Cingulum_Post_L","AAL_Hippocampus_L","AAL_ParaHippocampal_L","AAL_Amygdala_L","AAL_Caudate_L","AAL_Putamen_L","AAL_Pallidum_L","AAL_Thalamus_L"),]
+Occipital_LV<-RSfMRI_HC_aal[c("AAL_Calcarine_L","AAL_Cuneus_L","AAL_Lingual_L","AAL_Occipital_Sup_L","AAL_Occipital_Mid_L", "AAL_Occipital_Inf_L","AAL_Fusiform_L"),]
+Parietal_LV<-RSfMRI_HC_aal[c("AAL_Postcentral_L","AAL_Parietal_Sup_L","AAL_Parietal_Inf_L", "AAL_SupraMarginal_L","AAL_Angular_L","AAL_Precuneus_L","AAL_Paracentral_Lobule_L"),]
+Temporal_LV<-RSfMRI_HC_aal[c("AAL_Heschl_L","AAL_Temporal_Sup_L","AAL_Temporal_Pole_Sup_L","AAL_Temporal_Mid_L","AAL_Temporal_Pole_Mid_L","AAL_Temporal_Inf_L"),]
+
+Frontal_RV<-RSfMRI_HC_aal[c("AAL_Precentral_R","AAL_Frontal_Sup_R","AAL_Frontal_Sup_Orb_R","AAL_Frontal_Mid_R","AAL_Frontal_Mid_Orb_R1","AAL_Frontal_Inf_Oper_R","AAL_Frontal_Inf_Tri_R","AAL_Frontal_Inf_Orb_R","AAL_Rolandic_Oper_R","AAL_Supp_Motor_Area_R","AAL_Olfactory_R","AAL_Frontal_Sup_Medial_R", "AAL_Frontal_Mid_Orb_R2"),]
+Cereb_RV<-RSfMRI_HC_aal[c("AAL_Cerebelum_Crus1_R","AAL_Cerebelum_Crus2_R","AAL_Cerebelum_3_R","AAL_Cerebelum_4_5_R","AAL_Cerebelum_6_R","AAL_Cerebelum_7b_R","AAL_Cerebelum_8_R","AAL_Cerebelum_9_R","AAL_Cerebelum_10_R"),]
+
+VermisV<-RSfMRI_HC_aal[c("AAL_Vermis_1_2","AAL_Vermis_3","AAL_Vermis_4_5", "AAL_Vermis_6","AAL_Vermis_7","AAL_Vermis_8","AAL_Vermis_9","AAL_Vermis_10"),]
+
+Temporal_RV<-RSfMRI_HC_aal[c("AAL_Temporal_Inf_R","AAL_Temporal_Sup_R","AAL_Temporal_Pole_Sup_R","AAL_Temporal_Pole_Mid_R",
+                             "AAL_Temporal_Mid_R","AAL_Heschl_R"),]
+
+Subcortical_RV<-RSfMRI_HC_aal[c("AAL_Rectus_R","AAL_Insula_R","AAL_Cingulum_Ant_R","AAL_Cingulum_Mid_R","AAL_Cingulum_Post_R","AAL_Hippocampus_R","AAL_ParaHippocampal_R","AAL_Amygdala_R","AAL_Caudate_R","AAL_Putamen_R",
+                                "AAL_Pallidum_R","AAL_Thalamus_R"),]
+Occipital_RV<-RSfMRI_HC_aal[c("AAL_Calcarine_R","AAL_Cuneus_R","AAL_Lingual_R","AAL_Occipital_Sup_R","AAL_Occipital_Mid_R",
+                              "AAL_Occipital_Inf_R","AAL_Fusiform_R"),]
+Parietal_RV<-RSfMRI_HC_aal[c("AAL_Postcentral_R","AAL_Parietal_Sup_R","AAL_Parietal_Inf_R","AAL_SupraMarginal_R","AAL_Angular_R","AAL_Precuneus_R","AAL_Paracentral_Lobule_R"),] 
+
+RSfMRI_HC_aal<-rbind(Frontal_LV,Subcortical_LV,Temporal_LV,Parietal_LV,Occipital_LV, Cereb_LV,
+                     Frontal_RV,Subcortical_RV, Temporal_RV, Parietal_RV, Occipital_RV, Cereb_RV, VermisV)
+
+
+
+#add pmatrix 
+RSfMRI_HCp <- read.csv(file = "p_SBC_01_HC_-10_rest.csv", head = TRUE, sep=";")
+
+i<-c(1:116)
+RSfMRI_HCp[ , i] <- apply(RSfMRI_HCp[ , i], 2,            # Specify own function within apply
+                          function(x) as.numeric(as.character(x)))
+RSfMRI_HCp<-as.matrix(RSfMRI_HCp)
+
+
+RSfMRI_HCp<-RSfMRI_HCp[,2:117]
+
+rownames(RSfMRI_HCp)<-colnames(RSfMRI_HCp)
+
+
+Frontal_L<-RSfMRI_HCp[,c("AAL_Precentral_L","AAL_Frontal_Sup_L","AAL_Frontal_Sup_Orb_L","AAL_Frontal_Mid_L","AAL_Frontal_Mid_Orb_L1","AAL_Frontal_Inf_Oper_L","AAL_Frontal_Inf_Tri_L","AAL_Frontal_Inf_Orb_L","AAL_Rolandic_Oper_L","AAL_Supp_Motor_Area_L","AAL_Olfactory_L","AAL_Frontal_Sup_Medial_L","AAL_Frontal_Mid_Orb_L2")]
+Cereb_L<-RSfMRI_HCp[,c("AAL_Cerebelum_Crus1_L","AAL_Cerebelum_Crus2_L","AAL_Cerebelum_3_L","AAL_Cerebelum_4_5_L","AAL_Cerebelum_6_L","AAL_Cerebelum_7b_L","AAL_Cerebelum_8_L","AAL_Cerebelum_9_L","AAL_Cerebelum_10_L")]
+Subcortical_L<-RSfMRI_HCp[,c("AAL_Rectus_L","AAL_Insula_L","AAL_Cingulum_Ant_L","AAL_Cingulum_Mid_L","AAL_Cingulum_Post_L","AAL_Hippocampus_L","AAL_ParaHippocampal_L","AAL_Amygdala_L","AAL_Caudate_L","AAL_Putamen_L","AAL_Pallidum_L","AAL_Thalamus_L")]
+Occipital_L<-RSfMRI_HCp[,c("AAL_Calcarine_L","AAL_Cuneus_L","AAL_Lingual_L","AAL_Occipital_Sup_L","AAL_Occipital_Mid_L", "AAL_Occipital_Inf_L","AAL_Fusiform_L")]
+Parietal_L<-RSfMRI_HCp[,c("AAL_Postcentral_L","AAL_Parietal_Sup_L","AAL_Parietal_Inf_L", "AAL_SupraMarginal_L","AAL_Angular_L","AAL_Precuneus_L","AAL_Paracentral_Lobule_L")]
+Temporal_L<-RSfMRI_HCp[,c("AAL_Heschl_L","AAL_Temporal_Sup_L","AAL_Temporal_Pole_Sup_L","AAL_Temporal_Mid_L","AAL_Temporal_Pole_Mid_L","AAL_Temporal_Inf_L")]
+
+Frontal_R<-RSfMRI_HCp[,c("AAL_Precentral_R","AAL_Frontal_Sup_R","AAL_Frontal_Sup_Orb_R","AAL_Frontal_Mid_R","AAL_Frontal_Mid_Orb_R1","AAL_Frontal_Inf_Oper_R","AAL_Frontal_Inf_Tri_R","AAL_Frontal_Inf_Orb_R","AAL_Rolandic_Oper_R","AAL_Supp_Motor_Area_R","AAL_Olfactory_R","AAL_Frontal_Sup_Medial_R", "AAL_Frontal_Mid_Orb_R2")]
+Cereb_R<-RSfMRI_HCp[,c("AAL_Cerebelum_Crus1_R","AAL_Cerebelum_Crus2_R","AAL_Cerebelum_3_R","AAL_Cerebelum_4_5_R","AAL_Cerebelum_6_R","AAL_Cerebelum_7b_R","AAL_Cerebelum_8_R","AAL_Cerebelum_9_R","AAL_Cerebelum_10_R")]
+
+Vermis<-RSfMRI_HCp[,c("AAL_Vermis_1_2","AAL_Vermis_3","AAL_Vermis_4_5", "AAL_Vermis_6","AAL_Vermis_7","AAL_Vermis_8","AAL_Vermis_9","AAL_Vermis_10")]
+
+Temporal_R<-RSfMRI_HCp[,c("AAL_Temporal_Inf_R","AAL_Temporal_Sup_R","AAL_Temporal_Pole_Sup_R","AAL_Temporal_Pole_Mid_R",
+                          "AAL_Temporal_Mid_R","AAL_Heschl_R")]
+
+Subcortical_R<-RSfMRI_HCp[,c("AAL_Rectus_R","AAL_Insula_R","AAL_Cingulum_Ant_R","AAL_Cingulum_Mid_R","AAL_Cingulum_Post_R","AAL_Hippocampus_R","AAL_ParaHippocampal_R","AAL_Amygdala_R","AAL_Caudate_R","AAL_Putamen_R",
+                             "AAL_Pallidum_R","AAL_Thalamus_R")]
+Occipital_R<-RSfMRI_HCp[,c("AAL_Calcarine_R","AAL_Cuneus_R","AAL_Lingual_R","AAL_Occipital_Sup_R","AAL_Occipital_Mid_R",
+                           "AAL_Occipital_Inf_R","AAL_Fusiform_R")]
+Parietal_R<-RSfMRI_HCp[,c("AAL_Postcentral_R","AAL_Parietal_Sup_R","AAL_Parietal_Inf_R","AAL_SupraMarginal_R","AAL_Angular_R","AAL_Precuneus_R","AAL_Paracentral_Lobule_R")] 
+
+RSfMRI_HCp_aal<-cbind(Frontal_L,Subcortical_L,Temporal_L,Parietal_L,Occipital_L, Cereb_L,
+                      Frontal_R,Subcortical_R, Temporal_R, Parietal_R, Occipital_R, Cereb_R, Vermis)
+
+#sort after Lobuli vertical
+Frontal_LV<-RSfMRI_HCp_aal[c("AAL_Precentral_L","AAL_Frontal_Sup_L","AAL_Frontal_Sup_Orb_L","AAL_Frontal_Mid_L","AAL_Frontal_Mid_Orb_L1","AAL_Frontal_Inf_Oper_L","AAL_Frontal_Inf_Tri_L","AAL_Frontal_Inf_Orb_L","AAL_Rolandic_Oper_L","AAL_Supp_Motor_Area_L","AAL_Olfactory_L","AAL_Frontal_Sup_Medial_L","AAL_Frontal_Mid_Orb_L2"),]
+Cereb_LV<-RSfMRI_HCp_aal[c("AAL_Cerebelum_Crus1_L","AAL_Cerebelum_Crus2_L","AAL_Cerebelum_3_L","AAL_Cerebelum_4_5_L","AAL_Cerebelum_6_L","AAL_Cerebelum_7b_L","AAL_Cerebelum_8_L","AAL_Cerebelum_9_L","AAL_Cerebelum_10_L"),]
+Subcortical_LV<-RSfMRI_HCp_aal[c("AAL_Rectus_L","AAL_Insula_L","AAL_Cingulum_Ant_L","AAL_Cingulum_Mid_L","AAL_Cingulum_Post_L","AAL_Hippocampus_L","AAL_ParaHippocampal_L","AAL_Amygdala_L","AAL_Caudate_L","AAL_Putamen_L","AAL_Pallidum_L","AAL_Thalamus_L"),]
+Occipital_LV<-RSfMRI_HCp_aal[c("AAL_Calcarine_L","AAL_Cuneus_L","AAL_Lingual_L","AAL_Occipital_Sup_L","AAL_Occipital_Mid_L", "AAL_Occipital_Inf_L","AAL_Fusiform_L"),]
+Parietal_LV<-RSfMRI_HCp_aal[c("AAL_Postcentral_L","AAL_Parietal_Sup_L","AAL_Parietal_Inf_L", "AAL_SupraMarginal_L","AAL_Angular_L","AAL_Precuneus_L","AAL_Paracentral_Lobule_L"),]
+Temporal_LV<-RSfMRI_HCp_aal[c("AAL_Heschl_L","AAL_Temporal_Sup_L","AAL_Temporal_Pole_Sup_L","AAL_Temporal_Mid_L","AAL_Temporal_Pole_Mid_L","AAL_Temporal_Inf_L"),]
+
+Frontal_RV<-RSfMRI_HCp_aal[c("AAL_Precentral_R","AAL_Frontal_Sup_R","AAL_Frontal_Sup_Orb_R","AAL_Frontal_Mid_R","AAL_Frontal_Mid_Orb_R1","AAL_Frontal_Inf_Oper_R","AAL_Frontal_Inf_Tri_R","AAL_Frontal_Inf_Orb_R","AAL_Rolandic_Oper_R","AAL_Supp_Motor_Area_R","AAL_Olfactory_R","AAL_Frontal_Sup_Medial_R", "AAL_Frontal_Mid_Orb_R2"),]
+Cereb_RV<-RSfMRI_HCp_aal[c("AAL_Cerebelum_Crus1_R","AAL_Cerebelum_Crus2_R","AAL_Cerebelum_3_R","AAL_Cerebelum_4_5_R","AAL_Cerebelum_6_R","AAL_Cerebelum_7b_R","AAL_Cerebelum_8_R","AAL_Cerebelum_9_R","AAL_Cerebelum_10_R"),]
+
+VermisV<-RSfMRI_HCp_aal[c("AAL_Vermis_1_2","AAL_Vermis_3","AAL_Vermis_4_5", "AAL_Vermis_6","AAL_Vermis_7","AAL_Vermis_8","AAL_Vermis_9","AAL_Vermis_10"),]
+
+Temporal_RV<-RSfMRI_HCp_aal[c("AAL_Temporal_Inf_R","AAL_Temporal_Sup_R","AAL_Temporal_Pole_Sup_R","AAL_Temporal_Pole_Mid_R",
+                              "AAL_Temporal_Mid_R","AAL_Heschl_R"),]
+
+Subcortical_RV<-RSfMRI_HCp_aal[c("AAL_Rectus_R","AAL_Insula_R","AAL_Cingulum_Ant_R","AAL_Cingulum_Mid_R","AAL_Cingulum_Post_R","AAL_Hippocampus_R","AAL_ParaHippocampal_R","AAL_Amygdala_R","AAL_Caudate_R","AAL_Putamen_R",
+                                 "AAL_Pallidum_R","AAL_Thalamus_R"),]
+Occipital_RV<-RSfMRI_HC_aal[c("AAL_Calcarine_R","AAL_Cuneus_R","AAL_Lingual_R","AAL_Occipital_Sup_R","AAL_Occipital_Mid_R",
+                              "AAL_Occipital_Inf_R","AAL_Fusiform_R"),]
+Parietal_RV<-RSfMRI_HCp_aal[c("AAL_Postcentral_R","AAL_Parietal_Sup_R","AAL_Parietal_Inf_R","AAL_SupraMarginal_R","AAL_Angular_R","AAL_Precuneus_R","AAL_Paracentral_Lobule_R"),] 
+
+RSfMRI_HCp_aal<-rbind(Frontal_LV,Subcortical_LV,Temporal_LV,Parietal_LV,Occipital_LV, Cereb_LV,
+                      Frontal_RV,Subcortical_RV, Temporal_RV, Parietal_RV, Occipital_RV, Cereb_RV, VermisV)
+
+diag(RSfMRI_HCp_aal)<-1
+RSfMRI_HCp_aal[lower.tri(RSfMRI_HCp_aal)]<-0
+
+
+
+diag(RSfMRI_HC_aal)<-1
+
+#png(file="corrplot_fMRI_aal_HC_GMdiv_all.png",
+  #  width=800, height=600)
+corrplot(RSfMRI_HC_aal, method="color", col=col5(50), is.corr=FALSE,tl.pos="n",cl.ratio=0.2, tl.offset=10,tl.col="black",pch.cex=0.8,tl.cex=0.5, cl.cex=1.5, sig.level = 0.05, p.mat=RSfMRI_HCp_aal,insig = "blank" )
+segments(c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(0,4), 
+         c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(117,4), lwd=2)
+segments(rep(0,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), rep(117,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), lwd=2)
+text(x = rep(-10, 7), y = c(5,13,20,28,35,45,57,67,75,83,88,98,111), labels = c("Vermis","Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal", "Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal"),cex=1.5)
+text(x = c(3,13,23,30,36,43,57,67,77,84,91,98,109), y = rep(-7, 7),labels = c("Frontal","Subcortical","Temporal","Parietal","Occipital","Cerebelum","Frontal", "Subcortical","Temporal","Parietal","Occipital","Cerebelum","Vermis"),xpd=NA, srt=45, cex=1.5)
+#dev.off()
+
+#compare sPET and fMRI values
+#png(file="cross-corrplot_fMRI_sPET_HC_all.png",
+#width=600, height=600)
+par(oma=c(3,3,3,3)) #
+par(mar=c(6,6,4,2) + 0.1)
+plot(zCorrMatCovHC,RSfMRI_HC_aal,ylab="Hemodynamic Connectivity",xlab="sPET Connectivity", cex.axis=2,cex.lab=2)
+diag(zCorrMatCovHC)<-NA
+diag(RSfMRI_HC_aal)<-NA
+regmod_uptake<-lm( c(RSfMRI_HC_aal)~c(zCorrMatCovHC))
+
+abline(regmod_uptake)
+text(x=-1,y=1,"r = 0.26", cex=2)
+
+#dev.off()
+cor.test(c(zCorrMatCovHC),c(RSfMRI_HC_aal))
+summary(regmod_uptake)
+
+
+```
+
+
+```{r, error=TRUE}
+#connectivity for single subjects with gm div data
+###########################################################################################
+#corr plots for gm normalized data
+#split for subjects
+my_Subjects <- split(WBL_R_aal, WBL_R_aal$record_id)
+
+
+Subjects<-subject_id<-c("RS_fPET001","RS_fPET002","RS_fPET003","RS_fPET004", "RS_fPET005","RS_fPET006","RS_fPET007","RS_fPET008","RS_fPET010","RS_fPET011","RS_fPET012","RS_fPET014","RS_fPET015","RS_fPET016","RS_fPET017","RS_fPET018","RS_fPET019","RS_fPET020","RS_fPET021","RS_fPET022","RS_fPET023","RS_fPET024","RS_fPET025","RS_fPET026","RS_fPET027","RS_fPET028","RS_fPET029")
+
+out<-list()
+p.value<-list()
+
+for (i in 1:length(my_Subjects)) {        
+  out[[i]]<-list()
+  p.Mat<-rcor.pvalue(my_Subjects[[i]][1:116], method="pearson")
+  
+  CorrMat1<-cor(my_Subjects[[i]][1:116], use = "complete.obs", method="pearson")
+  
+  out[[i]]<-CorrMat1  
+  p.Mat[lower.tri(p.Mat)]<-0
+  p.value[[i]]<-p.Mat
+  
+  png(file=paste0("corrplot_GMdiv_aal", Subjects[i],".png"))
+  corrplot(CorrMat1, method="color",col=col5(50),  is.corr=FALSE,cl.ratio=0.2, tl.col="black",tl.cex=0.5, cl.cex=1.5,p.mat = p.Mat, sig.level = 0.05, insig = "blank" )
+  dev.off()
+}
+
+
+#mean plot PD
+#get array of corr matrices for PD only
+arrPD <- array( unlist(out[c(1,2,3,5,7,8,9,12,14,20,23,24,26,27)]) , c(116,116,14)) # add subjects
+
+colnames(arrPD)<-colnames(WBL_R_aal[,1:116])
+
+
+#Get mean of third dimension
+meanCorrPD<-apply( arrPD , 1:2 , mean )
+
+
+colnames(meanCorrPD)<-colnames(WBL_R_aal[,1:116])
+rownames(meanCorrPD)<-colnames(WBL_R_aal[,1:116])
+
+
+
+#mean plot HC
+#get array of corr matrices for PD only
+arrHC <- array( unlist(out[c(4,6,10,11,13,15,16,17,18,19,21,22,25)]) , c(116,116,13))
+
+
+#Get mean of third dimension
+meanCorrHC<-apply( arrHC , 1:2 , mean )
+
+colnames(meanCorrHC)<-colnames(WBL_R_aal[,1:116])
+rownames(meanCorrHC)<-colnames(WBL_R_aal[,1:116])
+
+
+#calculate group differences after fisher's z transformation 
+
+#split for subjects
+my_Subjects <- split(WBL_R_aal, WBL_R_aal$record_id)
+
+Subjects<-subject_id<-c("RS_fPET001","RS_fPET002","RS_fPET003","RS_fPET004", "RS_fPET005","RS_fPET006","RS_fPET007","RS_fPET008","RS_fPET010","RS_fPET011","RS_fPET012","RS_fPET014","RS_fPET015","RS_fPET016","RS_fPET017","RS_fPET018","RS_fPET019","RS_fPET020","RS_fPET021","RS_fPET022","RS_fPET023","RS_fPET024","RS_fPET025","RS_fPET026","RS_fPET027","RS_fPET028","RS_fPET029")
+
+
+out<-list()
+
+for (i in 1:length(my_Subjects)) {        
+  out[[i]]<-list()
+  assign(Subjects[i], my_Subjects[[i]])
+  CorrMat1<-cor(my_Subjects[[i]][1:116], use = "complete.obs", method="pearson")
+  out[[i]]<-atanh(CorrMat1)
+  png(file=paste0("corrplot_GMdiv_aal", Subjects[i],".png"))
+  corrplot(CorrMat1, method="color",col=col5(50),  is.corr=FALSE,cl.ratio=0.2,type = "upper", tl.col="black",tl.cex=1.5, cl.cex=1.5, sig.level = 0.05, insig = "blank" )
+  dev.off()
+}
+
+#calculate the mean matrix
+#Make a 3D array from list of matrices
+arr <- array( unlist(out) , c(116,116,27) )
+
+
+#Get mean of third dimension
+meanCorr<-apply( arr , 1:2 , mean )
+
+#mean plot PD
+#get array of corr matrices for PD only
+arrPD <- array( unlist(out[c(1,2,3,5,7,8,9,12,14,20,23,24,26,27)]) , c(116,116,14))
+
+#calculate mean 
+meanzCorrPD<-apply( arrPD , 1:2 , mean )
+colnames(meanzCorrPD)<-colnames(WBL_R_aal[,1:116])
+rownames(meanzCorrPD)<-colnames(WBL_R_aal[,1:116])
+diag(meanzCorrPD)=NA
+
+
+#mean plot HC
+#get array of corr matrices for HC only
+arrHC <- array( unlist(out[c(4,6,10,11,13,15,16,17,18,19,21,22,25)]) , c(116,116,13))
+meanzCorrHC<-apply( arrHC , 1:2 , mean )
+colnames(meanzCorrHC)<-colnames(WBL_R_aal[,1:116])
+rownames(meanzCorrHC)<-colnames(WBL_R_aal[,1:116])
+diag(meanzCorrHC)<-NA
+
+#extract fisher-transformed correlation coefficient matrices per subject
+zCorrRSfPET004<-as.matrix(arrHC[,,1])
+zCorrRSfPET006<-as.matrix(arrHC[,,2])
+zCorrRSfPET011<-as.matrix(arrHC[,,3])
+zCorrRSfPET012<-as.matrix(arrHC[,,4])
+zCorrRSfPET015<-as.matrix(arrHC[,,5])
+zCorrRSfPET017<-as.matrix(arrHC[,,6])
+zCorrRSfPET018<-as.matrix(arrHC[,,7])
+zCorrRSfPET019<-as.matrix(arrHC[,,8])
+zCorrRSfPET020<-as.matrix(arrHC[,,9])
+zCorrRSfPET021<-as.matrix(arrHC[,,10])
+zCorrRSfPET023<-as.matrix(arrHC[,,11])
+zCorrRSfPET024<-as.matrix(arrHC[,,12])
+zCorrRSfPET027<-as.matrix(arrHC[,,13])
+
+
+zCorrRSfPET001<-as.matrix(arrPD[,,1])
+zCorrRSfPET002<-as.matrix(arrPD[,,2])
+zCorrRSfPET003<-as.matrix(arrPD[,,3])
+zCorrRSfPET005<-as.matrix(arrPD[,,4])
+zCorrRSfPET007<-as.matrix(arrPD[,,5])
+zCorrRSfPET008<-as.matrix(arrPD[,,6])
+zCorrRSfPET010<-as.matrix(arrPD[,,7])
+zCorrRSfPET014<-as.matrix(arrPD[,,8])
+zCorrRSfPET016<-as.matrix(arrPD[,,9])
+zCorrRSfPET022<-as.matrix(arrPD[,,10])
+zCorrRSfPET025<-as.matrix(arrPD[,,11])
+zCorrRSfPET026<-as.matrix(arrPD[,,12])
+zCorrRSfPET028<-as.matrix(arrPD[,,13])
+zCorrRSfPET029<-as.matrix(arrPD[,,14])
+
+#add additional subjects
+
+#add subjects here
+t.stat<- matrix(sapply(1:13456, function(x) 
+  tryCatch({t.test(c(zCorrRSfPET004[x], zCorrRSfPET006[x], zCorrRSfPET011[x], zCorrRSfPET012[x],zCorrRSfPET015[x], zCorrRSfPET017[x],zCorrRSfPET018[x],zCorrRSfPET019[x],zCorrRSfPET020[x],zCorrRSfPET021[x],zCorrRSfPET023[x],zCorrRSfPET024[x],zCorrRSfPET027[x]), 
+                   c(zCorrRSfPET001[x], zCorrRSfPET002[x],zCorrRSfPET003[x], zCorrRSfPET005[x], zCorrRSfPET007[x], zCorrRSfPET008[x],zCorrRSfPET010[x],zCorrRSfPET014[x],zCorrRsfPET016[x],zCorrRsfPET022[x],zCorrRsfPET025[x],zCorrRsfPET026[x],zCorrRsfPET028[x],zCorrRsfPET029[x]))$statistic},
+           error = function(err) {return(NA)})), nrow = 116)
+
+p.value<- matrix(sapply(1:13456, function(x) 
+  tryCatch({t.test(c(zCorrRSfPET004[x], zCorrRSfPET006[x], zCorrRSfPET011[x], zCorrRSfPET012[x],zCorrRSfPET015[x], zCorrRSfPET017[x],zCorrRSfPET018[x],zCorrRSfPET019[x],zCorrRSfPET020[x],zCorrRSfPET021[x],zCorrRSfPET023[x],zCorrRSfPET024[x],zCorrRSfPET027[x]), 
+                   c(zCorrRSfPET001[x], zCorrRSfPET002[x],zCorrRSfPET003[x], zCorrRSfPET005[x], zCorrRSfPET007[x], zCorrRSfPET008[x],zCorrRSfPET010[x],zCorrRSfPET014[x],zCorrRSfPET016[x],zCorrRSfPET022[x],zCorrRSfPET025[x],zCorrRSfPET026[x],zCorrRSfPET028[x],zCorrRSfPET029[x]))$p.value},
+           error = function(err) {return(NA)})), nrow = 116)
+
+#one sample PD
+p.value.PD<- matrix(sapply(1:13456, function(x) 
+  tryCatch({t.test(c(zCorrRSfPET001[x], zCorrRSfPET002[x],zCorrRSfPET003[x], zCorrRSfPET005[x], zCorrRSfPET007[x], zCorrRSfPET008[x],zCorrRSfPET010[x],zCorrRSfPET014[x],zCorrRSfPET016[x],zCorrRSfPET022[x],zCorrRSfPET025[x],zCorrRSfPET026[x],zCorrRSfPET028[x],zCorrRSfPET029[x]))$p.value},
+           error = function(err) {return(NA)})), nrow = 116)
+p.value.PD[lower.tri(p.value.PD)]<-NA
+
+colnames(p.value.PD)<-colnames(RSfPET_aal[,1:116])
+rownames(p.value.PD)<-colnames(RSfPET_aal[,1:116])
+
+
+#one sample HC
+p.value.HC<- matrix(sapply(1:13456, function(x) 
+  tryCatch({t.test(c(zCorrRSfPET004[x], zCorrRSfPET006[x], zCorrRSfPET011[x], zCorrRSfPET012[x],zCorrRSfPET015[x], zCorrRSfPET017[x],zCorrRSfPET018[x],zCorrRSfPET019[x],zCorrRSfPET020[x],zCorrRSfPET021[x],zCorrRSfPET023[x],zCorrRSfPET024[x],zCorrRSfPET027[x]))$p.value},
+           error = function(err) {return(NA)})), nrow = 116)
+p.value.HC[lower.tri(p.value.HC)]<-NA
+
+colnames(p.value.HC)<-colnames(RSfPET_aal[,1:116])
+rownames(p.value.HC)<-colnames(RSfPET_aal[,1:116])
+
+
+#plot mean z R values with one sample t-test ps PD
+#png(file="corrplot_mean_aal_PD_GMdiv.png",
+ #   width=1000, height=600)
+corrplot(meanzCorrPD, method="color" ,col=col5(50), is.corr=FALSE,tl.pos="n",cl.ratio=0.2,na.label="  ", tl.offset=10,tl.col="black",pch.cex=0.8,tl.cex=0.5, cl.cex=1.5, p.mat = p.value.PD,sig.level = 0.05, insig = "blank" )
+#add lines and names for segments
+segments(c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(0,4), 
+         c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(117,4), lwd=2)
+segments(rep(0,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), rep(117,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), lwd=2)
+text(x = rep(-10, 7), y = c(5,13,20,28,35,45,57,67,75,83,88,98,111), labels = c("Vermis","Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal", "Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal"), cex=1.5)
+text(x = c(3,13,23,30,36,43,57,67,77,84,91,98,109), y = rep(-7, 7),labels = c("Frontal","Subcortical","Temporal","Parietal","Occipital","Cerebelum","Frontal", "Subcortical","Temporal","Parietal","Occipital","Cerebelum","Vermis"),xpd=NA, srt=45, cex=1.5)
+#dev.off()
+
+#png(file="corrplot_mean_aal_HC_GMdiv.png",
+  #  width=1000, height=600)
+corrplot(meanzCorrHC, method="color" ,col=col5(50), is.corr=FALSE,tl.pos="n",cl.ratio=0.2, tl.offset=10,tl.col="black",pch.cex=0.8,tl.cex=0.5, cl.cex=1.5, p.mat = p.value.HC,sig.level = 0.05, insig = "blank", na.label="  ")
+#add lines and names for segments
+segments(c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(0,4), 
+         c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(117,4), lwd=2)
+segments(rep(0,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), rep(117,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), lwd=2)
+text(x = rep(-10, 7), y = c(5,13,20,28,35,45,57,67,75,83,88,98,111), labels = c("Vermis","Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal", "Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal"),cex=1.5)
+text(x = c(3,13,23,30,36,43,57,67,77,84,91,98,109), y = rep(-7, 7),labels = c("Frontal","Subcortical","Temporal","Parietal","Occipital","Cerebelum","Frontal", "Subcortical","Temporal","Parietal","Occipital","Cerebelum","Vermis"),xpd=NA, srt=45,cex=1.5)
+#dev.off()
+
+
+
+#compare fPET and fMRI values
+#png(file="cross-corrplot_fMRI_fPET_HC_all.png",
+#width=600, height=600)
+par(oma=c(3,3,3,3)) #
+par(mar=c(6,6,4,2) + 0.1)
+plot(meanzCorrHC,RSfMRI_HC_aal,ylab="Hemodynamic Connectivity",xlab="fPET Connectivity", cex.axis=2,cex.lab=2)
+diag(meanzCorrHC)<-NA
+diag(RSfMRI_HC_aal)<-NA
+regmod_uptake<-lm( c(RSfMRI_HC_aal)~c(meanzCorrHC))
+
+abline(regmod_uptake)
+text(x=-0.1,y=1,"r = 0.17", cex=2)
+
+#dev.off()
+cor.test(c(meanzCorrHC),c(RSfMRI_HC_aal))
+summary(regmod_uptake)
+
+#compare fPET and fMRI values
+#png(file="cross-corrplot_fMRI_fPET_PD_all.png",
+#width=600, height=600)
+par(oma=c(3,3,3,3)) #
+par(mar=c(6,6,4,2) + 0.1)
+plot(meanzCorrPD,RSfMRI_PD_aal,ylab="Hemodynamic Connectivity",xlab="fPET Connectivity", cex.axis=2,cex.lab=2)
+diag(meanzCorrPD)<-NA
+diag(RSfMRI_PD_aal)<-NA
+regmod_uptake<-lm( c(RSfMRI_PD_aal)~c(meanzCorrPD))
+
+abline(regmod_uptake)
+text(x=-0.1,y=1,"r = 0.18", cex=2)
+
+#dev.off()
+cor.test(c(meanzCorrPD),c(RSfMRI_PD_aal))
+summary(regmod_uptake)
+
+#compare fPET and sPET values
+#png(file="cross-corrplot_sPET_fPET_PD_all.png",
+#width=600, height=600)
+par(oma=c(3,3,3,3)) #
+par(mar=c(6,6,4,2) + 0.1)
+plot(meanzCorrPD,zCorrMatCovPD,ylab="sPET Connectivity",xlab="fPET Connectivity", cex.axis=2,cex.lab=2)
+diag(meanzCorrPD)<-NA
+diag(RSfMRI_PD_aal)<-NA
+regmod_uptake<-lm( c(zCorrMatCovPD)~c(meanzCorrPD))
+
+abline(regmod_uptake)
+text(x=-0.1,y=2,"r = 0.17", cex=2)
+
+#dev.off()
+cor.test(c(meanzCorrPD),c(zCorrMatCovPD))
+summary(regmod_uptake)
+
+
+#compare fPET and sPET values
+#png(file="cross-corrplot_sPET_fPET_HC_all.png",
+#width=600, height=600)
+par(oma=c(3,3,3,3)) #
+par(mar=c(6,6,4,2) + 0.1)
+plot(meanzCorrHC,zCorrMatCovHC,ylab="sPET Connectivity",xlab="fPET Connectivity", cex.axis=2,cex.lab=2)
+diag(meanzCorrHC)<-NA
+diag(zCorrMatCovHC)<-NA
+regmod_uptake<-lm( c(zCorrMatCovHC)~c(meanzCorrHC))
+
+abline(regmod_uptake)
+text(x=-0.1,y=2,"r = 0.32", cex=2)
+
+#dev.off()
+cor.test(c(meanzCorrHC),c(zCorrMatCovHC))
+summary(regmod_uptake)
+
+
+MeanUptake<-aggregate(WBL_R_aal[,1:116], by = list(WBL_R_aal$record_id, WBL_R_aal$diagnose), FUN=mean)
+
+#create adjacency matrixes for common edges 
+#PD
+#in groups
+PD<-subset(MeanUptake,Group.2=="PD")
+
+
+
+#generate p matrix for corrplot
+p.Mat.PD<-rcor.pvalue(PD[,3:118], method="pearson")
+
+#create adjacency matrix
+#all significant T/F
+ad.p.Mat.PD<-p.Mat.PD<0.05
+#matrix with significant ones in numbers (corr) pos and neg 
+CorrMatCovPD_th <- matrix(CorrMatCovPD[ifelse(ad.p.Mat.PD, T, NA)], ncol = ncol(CorrMatCovPD))
+#only positive significant T/F
+CorrMatCovPD_p<-CorrMatCovPD_th>0
+#serach in significant connections for >0 = 1 and others 0 = neg 
+pn_zCorrMatCovPD_th<-ifelse(CorrMatCovPD_th>0, yes = 1, no = 0)
+
+#refill all others with 0 = all 0 but pos = 1
+pn_zCorrMatCovPD_th[is.na(pn_zCorrMatCovPD_th)]<-0
+
+#create symmetric matrix for graph and call p_z...=pos
+makeSymm <- function(pn_zCorrMatCovPD_th) {
+  pn_zCorrMatCovPD_th[lower.tri(pn_zCorrMatCovPD_th)] <- t(pn_zCorrMatCovPD_th)[lower.tri(pn_zCorrMatCovPD_th)]
+  return(pn_zCorrMatCovPD_th)
+}
+p_zCorrMatCovPD<-makeSymm(pn_zCorrMatCovPD_th)
+
+diag(p_zCorrMatCovPD)<-0
+
+#export as binary for BrainNet
+#write.table(p_zCorrMatCovPD, file="PDCov_bin.txt",dec=".",sep = "\t", row.names=FALSE, col.names=FALSE)
+
+#HC
+#in groups
+HC<-subset(MeanUptake,Group.2=="HC")
+
+#correlation matrix ROI-based uptake values
+CorrMatCovHC<-cor(HC[,3:118], use = "complete.obs", method="pearson")
+
+
+#generate p matrix for corrplot
+p.Mat.HC<-rcor.pvalue(HC[,3:118], method="pearson")
+
+#create adjacency matrix for HC
+#all significant connections pos and neg T/F 
+ad.p.Mat.HC<-p.Mat.HC<0.05
+#all significant connections with numbers (corrs) pos and neg 
+CorrMatCovHC_th <- matrix(CorrMatCovHC[ifelse(ad.p.Mat.HC, T, NA)], ncol = ncol(CorrMatCovHC))
+#pos connections T/F
+CorrMatCovHC_p<-CorrMatCovHC_th>0
+
+#serach in significant connections for >0 and refill with 1, others 0 
+pn_zCorrMatCovHC_th<-ifelse(CorrMatCovHC_th >0, yes = 1, no = 0)
+#refill all NA with 0= all pos significant = 1, others 0 
+pn_zCorrMatCovHC_th[is.na(pn_zCorrMatCovHC_th)]<-0
+
+#make symmetric matrix of positive connections for graph and name p_...Z (pos)
+makeSymm <- function(pn_zCorrMatCovHC_th) {
+  pn_zCorrMatCovHC_th[lower.tri(pn_zCorrMatCovHC_th)] <- t(pn_zCorrMatCovHC_th)[lower.tri(pn_zCorrMatCovHC_th)]
+  return(pn_zCorrMatCovHC_th)
+}
+p_zCorrMatCovHC<-makeSymm(pn_zCorrMatCovHC_th)
+
+diag(p_zCorrMatCovHC)<-0
+
+#Table binary Cov
+#write.table(p_zCorrMatCovHC, file="HCCov_bin.txt",dec=".",sep = "\t", #row.names=FALSE, col.names=FALSE)
+
+#function for counting number of significant connections per region for GT measures
+
+#multimodal degree
+count_ones_per_row <- function(matrix) {
+  num_rows <- nrow(matrix)
+  num_cols <- ncol(matrix)
+  
+  results <- vector(mode = "integer", length = num_rows)
+  
+  for (i in 1:num_rows) {
+    count <- 0
+    for (j in 1:num_cols) {
+      if (matrix[i, j] == 1) {
+        count <- count + 1
+      }
+    }
+    results[i] <- count
+  }
+  
+  return(results)
+}
+
+
+
+#for sPET
+#HC
+#refill diagonal with 0 for counting 
+diag(p_zCorrMatCovHC)<-0
+Degree_HCsPET<-count_ones_per_row(p_zCorrMatCovHC)
+
+
+#PD
+#for sPET
+diag(p_zCorrMatCovPD)<-0
+Degree_PDsPET<-count_ones_per_row(p_zCorrMatCovPD)
+
+
+
+
+
+#fPET 
+
+#split for subjects
+my_Subjects <- split(WBL_R_aal, WBL_R_aal$record_id)
+
+Subjects<-subject_id<-c("RS_fPET001","RS_fPET002","RS_fPET003","RS_fPET004", "RS_fPET005","RS_fPET006","RS_fPET007","RS_fPET008","RS_fPET010","RS_fPET011","RS_fPET012","RS_fPET014","RS_fPET015","RS_fPET016","RS_fPET017","RS_fPET018","RS_fPET019","RS_fPET020","RS_fPET021","RS_fPET022","RS_fPET023","RS_fPET024","RS_fPET025","RS_fPET026","RS_fPET027","RS_fPET028","RS_fPET029")
+
+
+out<-list()
+
+for (i in 1:length(my_Subjects)) {        
+  out[[i]]<-list()
+  assign(Subjects[i], my_Subjects[[i]])
+  CorrMat1<-cor(my_Subjects[[i]][1:116], use = "complete.obs", method="pearson")
+  out[[i]]<-atanh(CorrMat1)
+  png(file=paste0("corrplot_GMdiv_aal", Subjects[i],".png"))
+  corrplot(CorrMat1, method="color",col=col5(50),  is.corr=FALSE,cl.ratio=0.2,type = "upper", tl.col="black",tl.cex=1.5, cl.cex=1.5, sig.level = 0.05, insig = "blank" )
+  dev.off()
+}
+
+#calculate the mean matrix
+#Make a 3D array from list of matrices
+arr <- array( unlist(out) , c(116,116,27) )
+
+
+#Get mean of third dimension
+meanCorr<-apply( arr , 1:2 , mean )
+
+#mean plot PD
+#get array of corr matrices for PD only
+arrPD <- array( unlist(out[c(1,2,3,5,7,8,9,12,14,20,23,24,26,27)]) , c(116,116,14))#add additional subjects
+
+#calculate mean 
+meanzCorrPD<-apply( arrPD , 1:2 , mean )
+
+
+
+#mean plot HC
+#get array of corr matrices for HC only
+arrHC <- array( unlist(out[c(4,6,10,11,13,15,16,17,18,19,21,22,25)]) , c(116,116,13))#add additional subjects
+meanzCorrHC<-apply( arrHC , 1:2 , mean )
+
+
+#extract fisher-transformed correlation coefficient matrices per subject
+zCorrRSfPET004<-as.matrix(arrHC[,,1])
+zCorrRSfPET006<-as.matrix(arrHC[,,2])
+zCorrRSfPET011<-as.matrix(arrHC[,,3])
+zCorrRSfPET012<-as.matrix(arrHC[,,4])
+zCorrRSfPET015<-as.matrix(arrHC[,,5])
+zCorrRSfPET017<-as.matrix(arrHC[,,6])
+zCorrRSfPET018<-as.matrix(arrHC[,,7])
+zCorrRSfPET019<-as.matrix(arrHC[,,8])
+zCorrRSfPET020<-as.matrix(arrHC[,,9])
+zCorrRSfPET021<-as.matrix(arrHC[,,10])
+zCorrRSfPET023<-as.matrix(arrHC[,,11])
+zCorrRSfPET024<-as.matrix(arrHC[,,12])
+zCorrRSfPET027<-as.matrix(arrHC[,,13])
+
+
+zCorrRSfPET001<-as.matrix(arrPD[,,1])
+zCorrRSfPET002<-as.matrix(arrPD[,,2])
+zCorrRSfPET003<-as.matrix(arrPD[,,3])
+zCorrRSfPET005<-as.matrix(arrPD[,,4])
+zCorrRSfPET007<-as.matrix(arrPD[,,5])
+zCorrRSfPET008<-as.matrix(arrPD[,,6])
+zCorrRSfPET010<-as.matrix(arrPD[,,7])
+zCorrRSfPET014<-as.matrix(arrPD[,,8])
+zCorrRSfPET016<-as.matrix(arrPD[,,9])
+zCorrRSfPET022<-as.matrix(arrPD[,,10])
+zCorrRSfPET025<-as.matrix(arrPD[,,11])
+zCorrRSfPET026<-as.matrix(arrPD[,,12])
+zCorrRSfPET028<-as.matrix(arrPD[,,13])
+zCorrRSfPET029<-as.matrix(arrPD[,,14])
+
+
+#one sample PD
+p.value.PD<- matrix(sapply(1:13456, function(x) 
+  tryCatch({t.test(c(zCorrRSfPET001[x], zCorrRSfPET002[x],zCorrRSfPET003[x], zCorrRSfPET005[x], zCorrRSfPET007[x], zCorrRSfPET008[x],zCorrRSfPET010[x],zCorrRSfPET014[x],zCorrRSfPET016[x],zCorrRSfPET022[x],zCorrRSfPET025[x],zCorrRSfPET026[x],zCorrRSfPET028[x],zCorrRSfPET029[x]))$p.value},
+           error = function(err) {return(NA)})), nrow = 116)
+
+
+#one sample HC
+p.value.HC<- matrix(sapply(1:13456, function(x) 
+  tryCatch({t.test(c(zCorrRSfPET004[x], zCorrRSfPET006[x], zCorrRSfPET011[x], zCorrRSfPET012[x],zCorrRSfPET015[x], zCorrRSfPET017[x],zCorrRSfPET018[x],zCorrRSfPET019[x],zCorrRSfPET020[x],zCorrRSfPET021[x],zCorrRSfPET023[x],zCorrRSfPET024[x],zCorrRSfPET027[x]))$p.value},
+           error = function(err) {return(NA)})), nrow = 116)
+
+#significant connections T/F
+ad.p.value.PD<-p.value.PD<0.05
+
+#matrix with signif. corrs only
+meanzCorrPD_th<-matrix(meanzCorrPD[ifelse(ad.p.value.PD, T, NA)], ncol = ncol(meanzCorrPD))
+
+#only positive
+p_meanzCorrPD_th<-meanzCorrPD_th>0
+#create binary matrix of significant ones
+ad.p.value.PD_n<-ifelse(p_meanzCorrPD_th == TRUE, yes = 1, no = 0)
+
+ad.p.value.PD_n[is.na(ad.p.value.PD_n)]<-0
+
+
+
+#only significant connections
+ad.p.value.HC<-p.value.HC<0.05
+#all significant connectiony T/F
+
+#matrix with signif. corrs only
+#significant connections with numbers (pos and neg)
+meanzCorrHC_th<-matrix(meanzCorrHC[ifelse(ad.p.value.HC, T, NA)], ncol = ncol(meanzCorrHC))
+#pos significant connections T/F 
+p_meanzCorrHC_th<-meanzCorrHC_th>0
+#create binary matrix of significant ones
+#significant connections = 1, others 0 
+ad.p.value.HC_n<-ifelse(p_meanzCorrHC_th == TRUE, yes = 1, no = 0)
+
+#refill NA with 0, only pos= 1
+ad.p.value.HC_n[is.na(ad.p.value.HC_n)]<-0
+
+
+#Table binary Cov
+#write.table(ad.p.value.HC_n, file="HCfCon_bin.txt",dec=".",sep = "\t", row.names=FALSE, col.names=FALSE)
+
+#for fPET
+#HC
+diag(ad.p.value.HC_n)<-0
+
+Degree_HCfPET<-count_ones_per_row(ad.p.value.HC_n)
+
+#PD
+#for fPET
+diag(ad.p.value.PD_n)<-0
+Degree_PDfPET<-count_ones_per_row(ad.p.value.PD_n)
+
+
+
+#create ad p matrix for fMRI
+#only significant connections T/F
+ad.pfMRI.PD<-RSfMRI_PDp_aal<0.05
+
+#significant connections with numbers pos and neg (Corr)
+fMRICorrPD_th<-matrix(RSfMRI_PD_aal[ifelse(ad.pfMRI.PD, T, NA)], ncol = ncol(RSfMRI_PD_aal))
+#only positive with T/F
+pfMRICorrPD_th<-fMRICorrPD_th>0
+#pos significant connections = 1, others 0 
+ad.p.value.RSfMRIPD_n<-ifelse(pfMRICorrPD_th == TRUE, yes = 1, no = 0)
+#refill all others with 0 
+ad.p.value.RSfMRIPD_n[is.na(ad.p.value.RSfMRIPD_n)]<-0
+
+
+n_ad.pvalue.RSfMRI_PD<-makeSymm(ad.p.value.RSfMRIPD_n)
+
+
+#create ad p matrix for fMRI
+#only significant connections with T/F
+ad.pfMRI.HC<-RSfMRI_HCp_aal<0.05
+
+#significant connections with numbers (corrs) pos and neg 
+fMRICorrHC_th<-matrix(RSfMRI_HC_aal[ifelse(ad.pfMRI.HC, T, NA)], ncol = ncol(RSfMRI_HC_aal))
+
+#only pos significant connections T/F
+pfMRICorrHC_th<-fMRICorrHC_th>0
+
+#refill significant positive connections with 1, others 0 
+ad.p.value.RSfMRIHC_n<-ifelse(pfMRICorrHC_th == TRUE, yes = 1, no = 0)
+
+#refill NA with 0, only positive significant = 1
+ad.p.value.RSfMRIHC_n[is.na(ad.p.value.RSfMRIHC_n)]<-0
+
+
+p_ad.pvalue_RSfMRI_HC<-makeSymm(ad.p.value.RSfMRIHC_n)
+
+
+
+
+#HC
+diag(p_ad.pvalue_RSfMRI_HC)<-0
+
+Degree_HCfMRI<-count_ones_per_row(p_ad.pvalue_RSfMRI_HC)
+
+#PD
+#for fMRI
+diag(n_ad.pvalue.RSfMRI_PD)<-0
+
+Degree_PDfMRI<-count_ones_per_row(n_ad.pvalue.RSfMRI_PD)
+
+
+
+#HC common edges plots for GT
+#sPET vs fMRI
+#for common edges and dice coefficient we use only the upper diagonal, because otherwise each connections is considered twice
+#zero in lower tri (for counting one connection only)
+p_zCorrMatCovHC[lower.tri(p_zCorrMatCovHC)]<-0
+p_ad.pvalue_RSfMRI_HC[lower.tri(p_ad.pvalue_RSfMRI_HC)]<-0
+
+
+
+commonHC_sPET_fMRI<-p_ad.pvalue_RSfMRI_HC==1&p_zCorrMatCovHC==1
+
+
+#count 1s in cov matrix
+count_Cov<-sum(p_zCorrMatCovHC[upper.tri(p_zCorrMatCovHC)])
+
+#count 1s in fMRI matrix
+count_fMRI<-sum(p_ad.pvalue_RSfMRI_HC[upper.tri(p_ad.pvalue_RSfMRI_HC)])
+
+#common edges binary
+#refill with 1 if common egde, else 0 
+commonHC_sPET_fMRI_bin<-ifelse(commonHC_sPET_fMRI == TRUE, yes = 1, no = 0)
+
+
+sym_commonHC_sPET_fMRI_bin<-makeSymm(commonHC_sPET_fMRI_bin)
+
+
+#write.table(sym_commonHC_sPET_fMRI_bin, file="HCfMRIsPET_bin.txt",dec=".",sep = "\t", row.names=FALSE, col.names=FALSE)
+
+#count 1s in common edges
+count_sPETfMRI<-sum(commonHC_sPET_fMRI_bin[upper.tri(commonHC_sPET_fMRI_bin)])
+
+#calculate dice 
+DC_sPETfMRT=(2*count_sPETfMRI)/(count_fMRI+count_Cov)
+#0.37
+
+#sPET vs fPET
+#count 1s in fPET matrix
+ad.p.value.HC_n[lower.tri(ad.p.Mat.HC_n)]<-0
+
+
+count_fPET<-sum(ad.p.value.HC_n[upper.tri(ad.p.value.HC_n)])
+
+commonHC_fPET_sPET<-p_zCorrMatCovHC==1&ad.p.value.HC_n==1
+
+
+#refill T with 1, common edges = 1, else 0 
+commonHC_fPET_sPET_bin<-ifelse(commonHC_fPET_sPET == TRUE, yes = 1, no = 0)
+
+
+sym_commonHC_fPET_sPET_bin<-makeSymm(commonHC_fPET_sPET_bin)
+#write.table(sym_commonHC_fPET_sPET_bin, file="HCsPETfPET_bin.txt",dec=".",sep = "\t", row.names=FALSE, col.names=FALSE)
+
+#sum 1 in upper diagonal 
+count_sPETfPET<-sum(commonHC_fPET_sPET_bin[upper.tri(commonHC_fPET_sPET_bin)])
+
+DC_sPETfPET=(2*count_sPETfPET)/(count_fPET+count_Cov)
+#0.36
+
+#fPET vs fMRI
+#common edges T/F
+commonHC_fPET_fMRI<-p_ad.pvalue_RSfMRI_HC==1&ad.p.value.HC_n==1
+#refill T with 1, else 0 
+commonHC_fPET_fMRI_bin<-ifelse(commonHC_fPET_fMRI == TRUE, yes = 1, no = 0)
+
+sym_commonHC_fPET_fMRI_bin<-makeSymm(commonHC_fPET_fMRI_bin)
+
+#write.table(sym_commonHC_fPET_fMRI_bin, file="HCsfPETfMRI_bin.txt",dec=".",sep = "\t", row.names=FALSE, col.names=FALSE)
+
+#sum 1s in upper diagonal 
+count_fPETfMRI<-sum(commonHC_fPET_fMRI_bin[upper.tri(commonHC_fPET_fMRI_bin)])
+
+DC_fPETfMRI=(2*count_fPETfMRI)/(count_fPET+count_fMRI)
+#0.37
+
+#PD common edges plots for GT
+#sPET vs fMRI
+p_zCorrMatCovPD[lower.tri(p_zCorrMatCovPD)]<-0
+
+
+countPD_Cov<-sum(p_zCorrMatCovPD[upper.tri(p_zCorrMatCovPD)])
+
+n_ad.pvalue.RSfMRI_PD[lower.tri(n_ad.pvalue.RSfMRI_PD)]<-0
+countPD_fMRI<-sum(n_ad.pvalue.RSfMRI_PD[upper.tri(n_ad.pvalue.RSfMRI_PD)])
+
+#define common edges with T/F
+commonPD_sPET_fMRI<-n_ad.pvalue.RSfMRI_PD==1&p_zCorrMatCovPD==1
+#refill T with 1, else 0 
+commonPD_sPET_fMRI_bin<-ifelse(commonPD_sPET_fMRI == TRUE, yes = 1, no = 0)
+
+sym_commonPD_sPET_fMRI_bin<-makeSymm(commonPD_sPET_fMRI_bin)
+
+#write.table(sym_commonPD_sPET_fMRI_bin, file="PDfMRIsPET_bin.txt",dec=".",sep = "\t", row.names=FALSE, col.names=FALSE)
+
+
+
+#count 1s in common edges
+countPD_sPETfMRI<-sum(commonPD_sPET_fMRI_bin[upper.tri(commonPD_sPET_fMRI_bin)])
+
+#calculate dice 
+DCPD_sPETfMRT=(2*countPD_sPETfMRI)/(countPD_fMRI+countPD_Cov)
+#0.38
+
+
+#sPET vs fPET
+ad.p.value.PD_n[lower.tri(ad.p.value.PD_n)]<-0
+
+#define common edges T/F 
+commonPD_fPET_sPET<-p_zCorrMatCovPD==1&ad.p.value.PD_n==1
+#refill T with 1, else 0 
+commonPD_fPET_sPET_bin<-ifelse(commonPD_fPET_sPET == TRUE, yes = 1, no = 0)
+
+countPD_fPET<-sum(ad.p.value.PD_n[upper.tri(ad.p.value.PD_n)])
+#count 1s in common edges
+countPD_sPETfPET<-sum(commonPD_fPET_sPET_bin[upper.tri(commonPD_fPET_sPET_bin)])
+
+sym_commonPD_fPET_sPET_bin<-makeSymm(commonPD_fPET_sPET_bin)
+
+#write.table(sym_commonPD_fPET_sPET_bin, file="PDsPETfPET_bin.txt",dec=".",sep = "\t", row.names=FALSE, col.names=FALSE)
+
+#calculate dice 
+DCPD_sPETfPET=(2*countPD_sPETfPET)/(countPD_fPET+countPD_Cov)
+#0.33
+
+
+#fPET vs fMRI
+n_ad.pvalue.RSfMRI_PD[lower.tri(n_ad.pvalue.RSfMRI_PD)]<-0
+#common edges T/F
+commonPD_fPET_fMRI<-ad.p.value.RSfMRIPD_n==1&ad.p.value.PD_n==1
+#refill T with 1, else 0 
+commonPD_fPET_fMRI_bin<-ifelse(commonPD_fPET_fMRI == TRUE, yes = 1, no = 0)
+
+sym_commonPD_fPET_fMRI_bin<-makeSymm(commonPD_fPET_fMRI_bin)
+#write.table(sym_commonPD_fPET_fMRI_bin, file="PDsfPETfMRI_bin.txt",dec=".",sep = "\t", row.names=FALSE, col.names=FALSE)
+
+#count 1s in common edges
+countPDfMRIfPET<-sum(commonPD_fPET_fMRI_bin[upper.tri(commonPD_fPET_fMRI_bin)])
+
+#calculate dice 
+DCPD_fMRIfPET=(2*countPDfMRIfPET)/(countPD_fPET+countPD_fMRI)
+#0.42
+
+
+
+#for fPET_fMRI
+sym_commonHC_fPET_fMRI_bin<-makeSymm(commonHC_fPET_fMRI_bin)
+
+Degree_HC_fPET_fMRI<-count_ones_per_row(sym_commonHC_fPET_fMRI_bin)
+
+sym_commonPD_fPET_fMRI_bin<-makeSymm(commonPD_fPET_fMRI_bin)
+Degree_PD_fPET_fMRI<-count_ones_per_row(sym_commonPD_fPET_fMRI_bin)
+
+#for sPET_fMRI
+sym_commonHC_sPET_fMRI_bin<-makeSymm(commonHC_sPET_fMRI_bin)
+Degree_HC_sPET_fMRI<-count_ones_per_row(sym_commonHC_sPET_fMRI_bin)
+
+sym_commonPD_sPET_fMRI_bin<-makeSymm(commonPD_sPET_fMRI_bin)
+Degree_PD_sPET_fMRI<-count_ones_per_row(sym_commonPD_sPET_fMRI_bin)
+
+
+
+#for fPET_sPET
+sym_commonHC_fPET_sPET_bin<-makeSymm(commonHC_fPET_sPET_bin)
+Degree_HC_fPET_sPET<-count_ones_per_row(sym_commonHC_fPET_sPET_bin)
+
+sym_commonPD_fPET_sPET_bin<-makeSymm(commonPD_fPET_sPET_bin)
+Degree_PD_fPET_sPET<-count_ones_per_row(sym_commonPD_fPET_sPET_bin)
+
+
+#new data frame for boxplot, sPET-fMRI
+boxplot_df<-data.frame("Degree"=c(Degree_HC_sPET_fMRI,Degree_PD_sPET_fMRI))
+
+boxplot_df$lobe<-c(rep("Frontal", 13), rep("SC", 12), rep("Temporal",6),
+                   rep("Parietal",7), rep("Occipital",7), rep("Cereb",9),
+                   rep("Frontal", 13), rep("SC", 12), rep("Temporal",6),
+                   rep("Parietal",7), rep("Occipital",7),
+                   rep("Cereb",9), rep("Vermis",8))
+
+boxplot_df$Diagnose<-c(rep("HC",116),rep("PD",116))
+
+
+str(boxplot_df)
+
+
+stat.test <- boxplot_df %>%
+  group_by(lobe) %>%
+  t_test(Degree ~ Diagnose) %>%
+  adjust_pvalue(method = "BH") %>%
+  add_significance()
+stat.test
+
+# Create the plot
+myplot <- ggboxplot(
+  boxplot_df, x = "Diagnose", y = "Degree",
+  fill = "Diagnose", 
+  palette = "npg", legend = "none",
+  ggtheme = theme_pubr(border = TRUE))+
+  scale_fill_manual(values=c("#FFEDA0","#9F0026"))+
+  facet_wrap(~lobe)
+
+# Add statistical test p-values
+stat.test <- stat.test %>% add_xy_position(x = "Diagnose")
+myplot + stat_pvalue_manual(stat.test,hide.ns=TRUE, label.y=40, label = "p.adj.signif")
+
+#ggsave(filename="sPET-fMRI_Degree_GMdiv.png", #width=7, height=7, dpi =600)
+
+#new data frame for boxplot, fPET-fMRI
+boxplot_df_fPET<-data.frame("Degree"=c(Degree_HC_fPET_fMRI,Degree_PD_fPET_fMRI))
+
+boxplot_df_fPET$lobe<-c(rep("Frontal", 13), rep("SC", 12), rep("Temporal",6),
+                        rep("Parietal",7), rep("Occipital",7), rep("Cereb",9),
+                        rep("Frontal", 13), rep("SC", 12), rep("Temporal",6),
+                        rep("Parietal",7), rep("Occipital",7),
+                        rep("Cereb",9), rep("Vermis",8))
+
+boxplot_df_fPET$Diagnose<-c(rep("HC",116),rep("PD",116))
+
+ 
+
+#compare with multple t-tests
+
+stat.test <- boxplot_df_fPET %>%
+  group_by(lobe) %>%
+  t_test(Degree ~ Diagnose) %>%
+  adjust_pvalue(method = "BH") %>%
+  add_significance()
+stat.test
+
+# Create the plot
+myplot <- ggboxplot(
+  boxplot_df_fPET, x = "Diagnose", y = "Degree",
+  fill = "Diagnose", 
+  palette = "npg", legend = "none",
+  ggtheme = theme_pubr(border = TRUE))+
+  scale_fill_manual(values=c("#FFEDA0","#9F0026"))+
+  facet_wrap(~lobe)
+
+# Add statistical test p-values
+stat.test <- stat.test %>% add_xy_position(x = "Diagnose")
+myplot + stat_pvalue_manual(stat.test, hide.ns=TRUE,label = "p.adj.signif")
+
+#ggsave(filename="fPET-fMRI_Degree_GMdiv.png",width#=7, height=7, dpi =600)
+
+#new data frame for boxplot, fPET-sPET
+boxplot_df_sPET<-data.frame("Degree"=c(Degree_HC_fPET_sPET,Degree_PD_fPET_sPET))
+
+boxplot_df_sPET$lobe<-c(rep("Frontal", 13), rep("SC", 12), rep("Temporal",6),
+                        rep("Parietal",7), rep("Occipital",7), rep("Cereb",9),
+                        rep("Frontal", 13), rep("SC", 12), rep("Temporal",6),
+                        rep("Parietal",7), rep("Occipital",7),
+                        rep("Cereb",9), rep("Vermis",8))
+
+boxplot_df_sPET$Diagnose<-c(rep("HC",116),rep("PD",116))
+ 
+
+#compare with multple t-tests
+
+stat.test <- boxplot_df_sPET %>%
+  group_by(lobe) %>%
+  t_test(Degree ~ Diagnose) %>%
+  adjust_pvalue(method = "BH") %>%
+  add_significance()
+stat.test
+
+# Create the plot
+myplot <- ggboxplot(
+  boxplot_df_sPET, x = "Diagnose", y = "Degree",
+  fill = "Diagnose", 
+  palette = "npg", legend = "none",
+  ggtheme = theme_pubr(border = TRUE))+
+  scale_fill_manual(values=c("#FFEDA0","#9F0026"))+
+  facet_wrap(~lobe)
+
+# Add statistical test p-values
+stat.test <- stat.test %>% add_xy_position(x = "Diagnose")
+myplot + stat_pvalue_manual(stat.test, hide.ns=TRUE,label = "p.adj.signif")          
+#no sign. diff 
+#ggsave(filename="fPET-sPET_Degree_GMdiv.png", #width=7, height=7,dpi =600)
+
+
+
+#common edges plots
+pn_common_edges.HC<-fMRICorrHC_th>0&zCorrMatCovHC_th>0|fMRICorrHC_th<0&zCorrMatCovHC_th<0
+pn_common_edges.HC[fMRICorrHC_th>0&zCorrMatCovHC_th>0]=1
+pn_common_edges.HC[fMRICorrHC_th<0&zCorrMatCovHC_th<0]=-1
+pn_common_edges.HC[pn_common_edges.HC=="NA"]<-0
+
+colnames(pn_common_edges.HC)<-colnames(WBL_R_aal[,1:116])
+
+
+
+#png(file="commonedges_fMRI_Cov_HC_GMdiv.png",
+ #   width=800, height=600)
+corrplot(pn_common_edges.HC, method="color" ,type= 'upper',col=c("#FEE38B","#9F0026"), na.label=" ",is.corr=FALSE,tl.pos="n",cl.pos = 'n',cl.ratio=0.2, tl.offset=10,tl.col="black",pch.cex=0.8,tl.cex=0.5, cl.cex=1.5)
+#add lines and names for segments
+segments(c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(0,4), 
+         c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(117,4), lwd=2)
+segments(rep(0,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), rep(117,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), lwd=2)
+text(x = rep(130, 7), y = c(7,13,20,28,35,45,57,67,75,83,88,98,111), labels = c("Vermis","Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal", "Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal"), cex=1.5)
+text(x = c(3,13,23,30,36,43,57,67,77,84,91,98,109), y = rep(-7, 7),labels = c("Frontal","Subcortical","Temporal","Parietal","Occipital","Cerebelum","Frontal", "Subcortical","Temporal","Parietal","Occipital","Cerebelum","Vermis"),xpd=NA, srt=45,cex=1.5)
+colorlegend(col=c("#FEE38B","#9F0026"),xlim=c(-12,-7), ylim=c(5,20),c(seq(0,1,.5)), align="l",labels=c("-"," ","+"), vertical=TRUE, addlabels=TRUE)
+#dev.off()
+
+pn_common_edges.PD<-fMRICorrPD_th>0&zCorrMatCovPD_th>0|fMRICorrPD_th<0&zCorrMatCovPD_th<0
+pn_common_edges.PD[fMRICorrPD_th>0&zCorrMatCovPD_th>0]=1
+pn_common_edges.PD[fMRICorrPD_th<0&zCorrMatCovPD_th<0]=-1
+pn_common_edges.PD[pn_common_edges.PD=="NA"]<-0
+
+
+#png(file="commonedges_fMRI_Cov_PD_GMdiv.png",
+ #   width=800, height=600)
+corrplot(pn_common_edges.PD, method="color" ,type= 'upper',col=c("#FEE38B","#9F0026"), na.label=" ",is.corr=FALSE,tl.pos="n",cl.pos = 'n',cl.ratio=0.2, tl.offset=10,tl.col="black",pch.cex=0.8,tl.cex=0.5, cl.cex=1.5)
+#add lines and names for segments
+segments(c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(0,4), 
+         c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(117,4), lwd=2)
+segments(rep(0,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), rep(117,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), lwd=2)
+text(x = rep(130, 7), y = c(7,13,20,28,35,45,57,67,75,83,88,98,111), labels = c("Vermis","Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal", "Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal"), cex=1.5)
+text(x = c(3,13,23,30,36,43,57,67,77,84,91,98,109), y = rep(-7, 7),labels = c("Frontal","Subcortical","Temporal","Parietal","Occipital","Cerebelum","Frontal", "Subcortical","Temporal","Parietal","Occipital","Cerebelum","Vermis"),xpd=NA, srt=45, cex=1.5)
+colorlegend(col=c("#FEE38B","#9F0026"),xlim=c(-12,-7), ylim=c(5,20),c(seq(0,1,.5)), align="l",labels=c("-"," ","+"), vertical=TRUE, addlabels=TRUE)
+#dev.off()
+
+pn_common_edges.PD<-fMRICorrPD_th>0&meanzCorrPD_th>0|fMRICorrPD_th<0&meanzCorrPD_th<0
+pn_common_edges.PD[fMRICorrPD_th>0&meanzCorrPD_th>0]=1
+pn_common_edges.PD[fMRICorrPD_th<0&meanzCorrPD_th<0]=-1
+pn_common_edges.PD[pn_common_edges.PD=="NA"]<-0
+
+colnames(pn_common_edges.PD)<-colnames(RSfPET_aal[,1:116])
+
+#png(file="commonedges_fMRI_fPET_PD_GMdiv.png",
+   # width=800, height=600)
+corrplot(pn_common_edges.PD, method="color" ,type= 'upper',col=c("#FEE38B","#9F0026"), na.label=" ",is.corr=FALSE,tl.pos="n",cl.pos = 'n',cl.ratio=0.2, tl.offset=10,tl.col="black",pch.cex=0.8,tl.cex=0.5, cl.cex=1.5)
+#add lines and names for segments
+segments(c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(0,4), 
+         c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(117,4), lwd=2)
+segments(rep(0,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), rep(117,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), lwd=2)
+text(x = rep(130, 7), y = c(7,13,20,28,35,45,57,67,75,83,88,98,111), labels = c("Vermis","Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal", "Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal"), cex=1.5)
+text(x = c(3,13,23,30,36,43,57,67,77,84,91,98,109), y = rep(-7, 7),labels = c("Frontal","Subcortical","Temporal","Parietal","Occipital","Cerebelum","Frontal", "Subcortical","Temporal","Parietal","Occipital","Cerebelum","Vermis"),xpd=NA, srt=45, cex=1.5)
+colorlegend(col=c("#FEE38B","#9F0026"),xlim=c(-12,-7), ylim=c(5,20),c(seq(0,1,.5)), align="l",labels=c("-"," ","+"), vertical=TRUE, addlabels=TRUE)
+#dev.off()
+
+pn_common_edges.HC<-fMRICorrHC_th>0&meanzCorrHC_th>0|fMRICorrHC_th<0&meanzCorrHC_th<0
+pn_common_edges.HC[fMRICorrHC_th>0&meanzCorrHC_th>0]=1
+pn_common_edges.HC[fMRICorrHC_th<0&meanzCorrHC_th<0]=-1
+pn_common_edges.HC[pn_common_edges.HC=="NA"]<-0
+
+colnames(pn_common_edges.HC)<-colnames(RSfPET_aal[,1:116])
+
+#png(file="commonedges_fMRI_fPET_HC_GMdiv.png",
+ #   width=800, height=600)
+corrplot(pn_common_edges.HC, method="color" ,type= 'upper',col=c("#FEE38B","#9F0026"), na.label=" ",is.corr=FALSE,tl.pos="n",cl.pos = 'n',cl.ratio=0.2, tl.offset=10,tl.col="black",pch.cex=0.8,tl.cex=0.5, cl.cex=1.5)
+#add lines and names for segments
+segments(c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(0,4), 
+         c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(117,4), lwd=2)
+segments(rep(0,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), rep(117,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), lwd=2)
+text(x = rep(130, 7), y = c(7,13,20,28,35,45,57,67,75,83,88,98,111), labels = c("Vermis","Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal", "Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal"), cex=1.5)
+text(x = c(3,13,23,30,36,43,57,67,77,84,91,98,109), y = rep(-7, 7),labels = c("Frontal","Subcortical","Temporal","Parietal","Occipital","Cerebelum","Frontal", "Subcortical","Temporal","Parietal","Occipital","Cerebelum","Vermis"),xpd=NA, srt=45, cex=1.5)
+colorlegend(col=c("#FEE38B","#9F0026"),xlim=c(-12,-7), ylim=c(5,20),c(seq(0,1,.5)), align="l",labels=c("-"," ","+"), vertical=TRUE, addlabels=TRUE)
+#dev.off()
+
+
+pn_common_edges.PD<-meanzCorrPD_th>0&zCorrMatCovPD_th>0|meanzCorrPD_th<0&zCorrMatCovPD_th<0
+pn_common_edges.PD[meanzCorrPD_th>0&zCorrMatCovPD_th>0]=1
+pn_common_edges.PD[meanzCorrPD_th<0&zCorrMatCovPD_th<0]=-1
+pn_common_edges.PD[pn_common_edges.PD=="NA"]<-0
+
+colnames(pn_common_edges.PD)<-colnames(RSfPET_aal[,1:116])
+#png(file="commonedgespn_PD_GMdiv.png",
+ #   width=800, height=600)
+corrplot(pn_common_edges.PD, method="color" ,type= 'upper',col=c("#FEE38B","#9F0026"), na.label=" ",is.corr=FALSE,tl.pos="n",cl.pos = 'n',cl.ratio=0.2, tl.offset=10,tl.col="black",pch.cex=0.8,tl.cex=0.5, cl.cex=1.5)
+#add lines and names for segments
+segments(c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(0,4), 
+         c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(117,4), lwd=2)
+segments(rep(0,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), rep(117,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), lwd=2)
+text(x = rep(130, 7), y = c(7,13,20,28,35,45,57,67,75,83,88,98,111), labels = c("Vermis","Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal", "Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal"), cex=1.5)
+text(x = c(3,13,23,30,36,43,57,67,77,84,91,98,109), y = rep(-7, 7),labels = c("Frontal","Subcortical","Temporal","Parietal","Occipital","Cerebelum","Frontal", "Subcortical","Temporal","Parietal","Occipital","Cerebelum","Vermis"),xpd=NA, srt=45, cex=1.5)
+colorlegend(col=c("#FEE38B","#9F0026"),xlim=c(-12,-7), ylim=c(5,20),c(seq(0,1,.5)), align="l",labels=c("-"," ","+"), vertical=TRUE, addlabels=TRUE)
+#dev.off()
+
+pn_common_edges.PD<-meanzCorrPD_th>0&zCorrMatCovPD_th>0|meanzCorrPD_th<0&zCorrMatCovPD_th<0
+pn_common_edges.PD[meanzCorrPD_th>0&zCorrMatCovPD_th>0]=1
+pn_common_edges.PD[meanzCorrPD_th<0&zCorrMatCovPD_th<0]=-1
+pn_common_edges.PD[pn_common_edges.PD=="NA"]<-0
+
+colnames(pn_common_edges.PD)<-colnames(RSfPET_aal[,1:116])
+#png(file="commonedgespn_PD_GMdiv.png",
+  #  width=800, height=600)
+corrplot(pn_common_edges.PD, method="color" ,type= 'upper',col=c("#FEE38B","#9F0026"), na.label=" ",is.corr=FALSE,tl.pos="n",cl.pos = 'n',cl.ratio=0.2, tl.offset=10,tl.col="black",pch.cex=0.8,tl.cex=0.5, cl.cex=1.5)
+#add lines and names for segments
+segments(c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(0,4), 
+         c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(117,4), lwd=2)
+segments(rep(0,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), rep(117,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), lwd=2)
+text(x = rep(130, 7), y = c(7,13,20,28,35,45,57,67,75,83,88,98,111), labels = c("Vermis","Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal", "Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal"), cex=1.5)
+text(x = c(3,13,23,30,36,43,57,67,77,84,91,98,109), y = rep(-7, 7),labels = c("Frontal","Subcortical","Temporal","Parietal","Occipital","Cerebelum","Frontal", "Subcortical","Temporal","Parietal","Occipital","Cerebelum","Vermis"),xpd=NA, srt=45, cex=1.5)
+colorlegend(col=c("#FEE38B","#9F0026"),xlim=c(-12,-7), ylim=c(5,20),c(seq(0,1,.5)), align="l",labels=c("-"," ","+"), vertical=TRUE, addlabels=TRUE)
+#dev.off()
+
+#common edges plot with pos and neg
+pn_common_edges.HC<-meanzCorrHC_th>0&zCorrMatCovHC_th>0|meanzCorrHC_th<0&zCorrMatCovHC_th<0
+pn_common_edges.HC[meanzCorrHC_th>0&zCorrMatCovHC_th>0]=1
+pn_common_edges.HC[meanzCorrHC_th<0&zCorrMatCovHC_th<0]=-1
+pn_common_edges.HC[pn_common_edges.HC=="NA"]<-0
+
+colnames(pn_common_edges.HC)<-colnames(RSfPET_aal[,1:116])
+
+#png(file="commonedgespn_HC_GMdiv.png",
+   # width=800, height=600)
+corrplot(pn_common_edges.HC, method="color" ,type= 'upper',col=c("#FEE38B","#9F0026"), na.label=" ",is.corr=FALSE,tl.pos="n",cl.pos = 'n',cl.ratio=0.2, tl.offset=10,tl.col="black",pch.cex=0.8,tl.cex=0.5, cl.cex=1.5)
+#add lines and names for segments
+segments(c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(0,4), 
+         c(13.5,25.5,31.5,38.5,45.5,54.5,67.5,79.5,85.5,93.5,99.5,108.5), rep(117,4), lwd=2)
+segments(rep(0,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), rep(117,12), c(117-13.5,117-25.5,117-31.5,117-38.5,117-45.5,117-54.5,117-67.5,117-79.5,117-85.5,117-93.5,117-99.5,117-108.5), lwd=2)
+text(x = rep(130, 7), y = c(7,13,20,28,35,45,57,67,75,83,88,98,111), labels = c("Vermis","Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal", "Cerebelum","Occipital","Parietal","Temporal","Subcortical","Frontal"), cex=1.5)
+text(x = c(3,13,23,30,36,43,57,67,77,84,91,98,109), y = rep(-7, 7),labels = c("Frontal","Subcortical","Temporal","Parietal","Occipital","Cerebelum","Frontal", "Subcortical","Temporal","Parietal","Occipital","Cerebelum","Vermis"),xpd=NA, srt=45, cex=1.5)
+colorlegend(col=c("#FEE38B","#9F0026"),xlim=c(-12,-7), ylim=c(5,20),c(seq(0,1,.5)), align="l",labels=c("-"," ","+"), vertical=TRUE, addlabels=TRUE)
+#dev.off()
+
+
+aal_LRnodes<-read.delim("Node_AAL116_sortedLR.txt",header=FALSE)
+
+aal_LRnodes[,5]<-Degree_HC_fPET_sPET
+#write.table(aal_LRnodes,file="AAL_nodes_fPETsPET_HC.txt", sep="\t", col.names=FALSE,row.names=FALSE)
+
+aal_LRnodes[,5]<-Degree_PD_fPET_sPET
+#write.table(aal_LRnodes,file="AAL_nodes_fPETsPET_PD.txt", sep="\t", col.names=FALSE,row.names=FALSE)
+
+aal_LRnodes[,5]<-Degree_HC_fPET_fMRI
+#write.table(aal_LRnodes,file="AAL_nodes_fPETfMRI_HC.txt", sep="\t", col.names=FALSE,row.names=FALSE)
+
+aal_LRnodes[,5]<-Degree_PD_fPET_fMRI
+#write.table(aal_LRnodes,file="AAL_nodes_fPETfMRI_PD.txt", sep="\t", col.names=FALSE,row.names=FALSE)
+
+aal_LRnodes[,5]<-Degree_HC_sPET_fMRI
+#write.table(aal_LRnodes,file="AAL_nodes_sPETfMRI_HC.txt", sep="\t", col.names=FALSE,row.names=FALSE)
+
+aal_LRnodes[,5]<-Degree_PD_sPET_fMRI
+#write.table(aal_LRnodes,file="AAL_nodes_sPETfMRI_PD.txt", sep="\t", col.names=FALSE,row.names=FALSE)
+```
+
+
